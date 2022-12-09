@@ -1,7 +1,7 @@
-from collections import Counter, defaultdict
+import re
+from collections import defaultdict
 
 from dataclasses import dataclass
-import re
 
 
 @dataclass
@@ -60,18 +60,24 @@ def part_2():
         elif line[0].y == line[1].y:
             for x in range(min(line[0].x, line[1].x), max(line[0].x, line[1].x) + 1):
                 grid[x][line[0].y] += 1
-        else:  # daigonal
-            ...
+        else:  # diagonal
+            dir_x = 1 if line[0].x < line[1].x else -1
+            dir_y = 1 if line[0].y < line[1].y else -1
+            line_len = abs(line[0].x - line[1].x)
+            x, y = line[0].x, line[0].y
+            for _ in range(line_len + 1):
+                grid[x][y] += 1
+                x += dir_x
+                y += dir_y
 
     num_of_at_least_2 = 0
     for row in grid:
         for col in grid[row]:
             if grid[row][col] >= 2:
                 num_of_at_least_2 += 1
-            print(f"x={row},y={col}, num of lines: {grid[row][col]}")
+            # print(f"x={row},y={col}, num of lines: {grid[row][col]}")
     print(num_of_at_least_2)
 
 
 if __name__ == '__main__':
-    part_2()
     part_2()
