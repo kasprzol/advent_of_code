@@ -5,49 +5,42 @@ import gc
 def part_1():
     with open("input.txt") as indata:
         for line in indata:
-            fish = [int(f) for f in line.split(",")]
+            crabpos = [int(f) for f in line.split(",")]
 
-    DAYS = 80
-    fish_per_day = {}
-    for day in tqdm(range(1, DAYS + 1), total=DAYS + 1, maxinterval=1):
-        new_fish = []
-        new_born = 0
-        for one_fish in fish:
-            one_fish -= 1
-            if one_fish < 0:
-                one_fish = 6
-                new_born += 1
-            new_fish.append(one_fish)
-        new_fish.extend([8] * new_born)
-        fish_per_day[day] = len(new_fish)
-        print(f"{day=:2d}: {len(new_fish)}")
-        fish = new_fish
-    print(fish_per_day)
+    min_crab = min(crabpos)
+    max_crab = max(crabpos)
+    min_fuel_cost = 999999_999999**3
+    for pos in range(min_crab, max_crab + 1):
+        total_cost = 0
+        for crab in crabpos:
+            cost = crab - pos
+            if cost < 0:
+                cost *= -1
+            total_cost += cost
+        if total_cost < min_fuel_cost:
+            min_fuel_cost = total_cost
+    print(min_fuel_cost)
 
 
 def part_2():
     with open("input.txt") as indata:
         for line in indata:
-            fish = [int(f) for f in line.split(",")]
+            crabpos = [int(f) for f in line.split(",")]
 
-    DAYS = 128
-    gc.disable()
-    fish_per_day = {}
-    for day in tqdm(range(1, DAYS + 1), total=DAYS + 1, maxinterval=1):
-        new_fish = []
-        new_born = 0
-        for one_fish in fish:
-            one_fish -= 1
-            if one_fish < 0:
-                one_fish = 6
-                new_born += 1
-            new_fish.append(one_fish)
-        new_fish.extend([8] * new_born)
-        fish_per_day[day] = len(new_fish)
-        print(f"{day=:2d}: {len(new_fish)}")
-        fish = new_fish
-    for i in range(2, len(fish_per_day)):
-        print(f"delta {i-1}\N{RIGHTWARDS ARROW}{i}: {fish_per_day[i] - fish_per_day[i-1]}")
+    min_crab = min(crabpos)
+    max_crab = max(crabpos)
+    move_cost_per_distance = {0: 0, 1: 1}
+    for i in range(2, max_crab - min_crab + 1):
+        move_cost_per_distance[i] = move_cost_per_distance[i - 1] + i
+    min_fuel_cost = 999999_999999**3
+    for pos in range(min_crab, max_crab + 1):
+        total_cost = 0
+        for crab in crabpos:
+            distance = abs(crab - pos)
+            total_cost += move_cost_per_distance[distance]
+        if total_cost < min_fuel_cost:
+            min_fuel_cost = total_cost
+    print(min_fuel_cost)
 
 
 if __name__ == "__main__":
