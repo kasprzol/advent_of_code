@@ -55,16 +55,11 @@ def decode_segments(puzzle):
     segments["b"] = list(segments[9] - segments[3])[0]
     segments["g"] = list(segments[9] - segments[7] - {segments["b"]} - {segments["d"]})[0]
     segments["a"] = list(segments[9] - segments[4] - {segments["g"]})[0]
-    segments["c"] = list(segments[2] - segments[5])[0]
-    assert (
-        segments["a"]
-        != segments["b"]
-        != segments["c"]
-        != segments["d"]
-        != segments["e"]
-        != segments["f"]
-        != segments["g"]
-    )
+    segments["c"] = list(segments[2] - segments[5] - {segments["e"]})[0]
+    for x in list("abcdefg"):
+        for y in list("abcdefg"):
+            if x != y:
+                assert segments[x] != segments[y]
     return segments
 
 
