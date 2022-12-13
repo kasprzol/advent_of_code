@@ -84,10 +84,31 @@ def part_1():
 
 
 def part_2():
+    puzzles = []
     with open("input.txt") as indata:
         for line in indata:
-            crabpos = [int(f) for f in line.split(",")]
+            observation, reading = line.strip().split("|")
+            observation = observation.split()
+            observation.sort(key=len)
+            reading = reading.split()
+            puzzles.append((observation, reading))
+
+    total_sum = 0
+    for puzzle in puzzles:
+        segments = decode_segments(puzzle)
+        # In the output values, how many times do number 1, 4, 7, or 8 appear?
+        number = 0
+        for output_val in puzzle[1]:
+            for candidate_number in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]:
+                if frozenset(output_val) == segments[candidate_number]:
+                    number *= 10
+                    number += candidate_number
+                    break
+            else:
+                assert False, "not reached"
+        total_sum += number
+    print(total_sum)
 
 
 if __name__ == "__main__":
-    part_1()
+    part_2()
