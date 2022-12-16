@@ -13,8 +13,16 @@ SENSOR = "S"
 EMPTY = "."
 BEACON = "B"
 VISIBLE = "#"  # "\N{LIGHT SHADE}"
+SPAN_START = "["
+SPAN_END = "]"
 # NEW_SAND = "\N{FULL BLOCK}"
-TARGET_COLUMN = 20_00_000
+TEST_DATA = False
+if TEST_DATA:
+    TARGET_COLUMN = 10
+    DISTRESS_BEACON_MAX = 20
+else:
+    TARGET_COLUMN = 20_00_000
+    DISTRESS_BEACON_MAX = 4_000_000
 
 
 class Point(NamedTuple):
@@ -32,17 +40,26 @@ class Sensor(NamedTuple):
 
 @dataclass
 class VisibilitySpan:
-    length: int
     start: int
     stop: int
+    length: int = -1
+
+    def __post_init__(self):
+        self.length = self.stop - self.start + 1
 
 
-def print_cave(cave, cave_max_y):
+def print_cave(cave, spans, cave_max_y):
     min_x = min(cave.keys())
     max_x = max(cave.keys())
     print()
     for y in range(cave_max_y + 1):
         row = [cave[x][y] for x in range(min_x, max_x + 1)]
+        for span in spans[y]:
+            for i in range(span.length + 1):
+                if span.start + i < min_x or span.start + i > max_x:
+                    continue
+                if row[span.start - min_x + i] == EMPTY:
+                    row[span.start - min_x + i] = VISIBLE
         print(f"{y:2}", "".join(row))
 
 
@@ -93,11 +110,10 @@ def compute_visibility(sensors) -> defaultdict[int, list[VisibilitySpan]]:
                 sensor.position.y - distance_from_row,
                 sensor.position.y + distance_from_row,
             }
-            if TARGET_COLUMN not in interesting_rows:
-                continue
+            # if TARGET_COLUMN not in interesting_rows:
+            #     continue
             for row in interesting_rows:
                 new_span = VisibilitySpan(
-                    span_length,
                     sensor.position.x - (sensor.distance - distance_from_row),
                     sensor.position.x + (sensor.distance - distance_from_row),
                 )
@@ -109,7 +125,7 @@ def compute_visibility(sensors) -> defaultdict[int, list[VisibilitySpan]]:
             row_modified = False
             visibility_spans[row].sort(key=attrgetter("start"))
             for span1, span2 in pairwise(visibility_spans[row]):
-                if (span1.start <= span2.start <= span1.stop) or (span1.start <= span2.stop <= span1.stop):
+                if (span1.start <= span2.start <= span1.stop) or (span1.stop + 1 == span2.start):
                     span1.start = min(span1.start, span2.start)
                     span1.stop = max(span1.stop, span2.stop)
                     span1.length = span1.stop - span1.start + 1
@@ -123,8 +139,6 @@ def part_1():
     sensors, beacons, cave, cave_min_x, cave_max_x, cave_max_y = load_data()
     # print_cave(cave, cave_max_y)
     visibility_spans = compute_visibility(sensors)
-    # with open("visibility.pickle", "wb") as dump:
-    #     pickle.dump((sensors, beacons, cave, cave_min_x, cave_max_x, cave_max_y), dump)
     # print_cave(cave, cave_max_y)
     occupied_x = [x for x in cave if TARGET_COLUMN in cave[x]]
     visibility_count = 0
@@ -137,10 +151,71 @@ def part_1():
 
 
 def part_2():
-    ...
+    sensors, beacons, cave, cave_min_x, cave_max_x, cave_max_y = load_data()
+    # print_cave(cave, cave_max_y)
+    if TEST_DATA:
+        visibility_spans = compute_visibility(sensors)
+    else:
+        try:
+            with open("visibility.pickle", "rb") as dump:
+                visibility_spans = pickle.load(dump)
+        except Exception:
+            visibility_spans = compute_visibility(sensors)
+            with open("visibility.pickle", "wb") as dump:
+                spans_for_dump = {k: v for k, v in visibility_spans.items()}
+                pickle.dump(spans_for_dump, dump)
+                spans_for_dump = None
+    # print_cave(cave, visibility_spans, cave_max_y)
+
+    max__x = min(DISTRESS_BEACON_MAX, cave_max_x)
+    for row in tqdm(visibility_spans, desc="distress beacon"):
+        if row < 0 or row > DISTRESS_BEACON_MAX:
+            continue
+
+        # negate the spans in that row - create spans of invisible points
+        # assume whole row is invisible, then substract from that
+        invisible_spans = [VisibilitySpan(0, min(DISTRESS_BEACON_MAX, cave_max_x))]
+        invisible_spans[0].length = invisible_spans[0].stop + 1
+        for visible_span in visibility_spans[row]:
+            invisible_spans_changed = True
+            while invisible_spans_changed:
+                invisible_spans_changed = False
+                for invisible_idx, invisible in enumerate(invisible_spans):
+                    if visible_span.start <= invisible.start and visible_span.stop >= invisible.stop:
+                        invisible_spans.remove(invisible)
+                        invisible_spans_changed = True
+                        break
+                    elif invisible.start <= visible_span.stop <= invisible.stop:
+                        if visible_span.start <= invisible.start:
+                            new_start = visible_span.stop + 1
+                            new_stop = invisible.stop
+                        else:
+                            new_start = invisible.start
+                            new_stop = visible_span.start - 1
+                            if visible_span.stop < invisible.stop:
+                                # insert a new span
+                                new_invisible = VisibilitySpan(visible_span.stop + 1, invisible.stop)
+                                invisible_spans.insert(invisible_idx + 1, new_invisible)
+
+                        invisible_spans[invisible_idx] = VisibilitySpan(new_start, new_stop)
+                        invisible_spans_changed = True
+                        break
+                    elif invisible.start <= visible_span.start <= invisible.stop:
+                        new_start = invisible.start
+                        new_stop = visible_span.start - 1
+                        if visible_span.stop < invisible.stop:
+                            # unreachable? looks like checked by previous branch
+                            assert False, "unreachable"
+
+                        invisible_spans[invisible_idx] = VisibilitySpan(new_start, new_stop)
+                        invisible_spans_changed = True
+                        break
+
+        for invisible in invisible_spans:
+            print(f"Invisible span for {row=}: {invisible}. Frequency: {invisible.start * 4000000 + row}")
 
 
 if __name__ == "__main__":
     print(f"default gc: {gc.get_threshold()}")
-    gc.set_threshold(567_829, 48_342, 6_893)
-    part_1()
+    gc.set_threshold(267_829, 38_342, 16_893)
+    part_2()
