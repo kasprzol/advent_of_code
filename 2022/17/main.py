@@ -1,6 +1,8 @@
 import gc
-from itertools import cycle
+from itertools import cycle, repeat
 from typing import NamedTuple
+from rich import print
+from tqdm.rich import tqdm
 
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -11,7 +13,6 @@ EMPTY = "."
 SETTLED_ROCK_FRAGMENT = "\N{FULL BLOCK}"
 MOVING_ROCK_FRAGMENT = "\N{DARK SHADE}"
 # https://www.fileformat.info/info/unicode/block/block_elements/list.htm
-MAX_ROCKS = 2022
 CAVE_WIDTH = 7
 START_X = 2
 ROCK_START_CLEARANCE = 3
@@ -42,19 +43,19 @@ class Rock:
     type: RockType
     position: Point
     shapes = {
-        RockType.LINE: [[SETTLED_ROCK_FRAGMENT] * 4],
+        RockType.LINE: [[f"[red]{SETTLED_ROCK_FRAGMENT}[/red]"] * 4],
         RockType.PLUS: [
-            [EMPTY, SETTLED_ROCK_FRAGMENT, EMPTY],
-            [SETTLED_ROCK_FRAGMENT] * 3,
-            [EMPTY, SETTLED_ROCK_FRAGMENT, EMPTY],
+            [EMPTY, f"[green]{SETTLED_ROCK_FRAGMENT}[/green]", EMPTY],
+            [f"[green]{SETTLED_ROCK_FRAGMENT}[/green]"] * 3,
+            [EMPTY, f"[green]{SETTLED_ROCK_FRAGMENT}[/green]", EMPTY],
         ],
         RockType.REVERSE_L: [
-            [EMPTY, EMPTY, SETTLED_ROCK_FRAGMENT],
-            [EMPTY, EMPTY, SETTLED_ROCK_FRAGMENT],
-            [SETTLED_ROCK_FRAGMENT] * 3,
+            [EMPTY, EMPTY, f"[yellow]{SETTLED_ROCK_FRAGMENT}[/yellow]"],
+            [EMPTY, EMPTY, f"[yellow]{SETTLED_ROCK_FRAGMENT}[/yellow]"],
+            [f"[yellow]{SETTLED_ROCK_FRAGMENT}[/yellow]"] * 3,
         ],
-        RockType.PIPE: [[SETTLED_ROCK_FRAGMENT]] * 4,
-        RockType.SQUARE: [[SETTLED_ROCK_FRAGMENT] * 2] * 2,
+        RockType.PIPE: [[f"[blue]{SETTLED_ROCK_FRAGMENT}[/blue]"]] * 4,
+        RockType.SQUARE: [[f"[purple]{SETTLED_ROCK_FRAGMENT}[/purple]"] * 2] * 2,
     }
 
     @property
@@ -88,23 +89,21 @@ class Direction(Enum):
 class Cave:
     def __init__(self):
         self.rock = None
-        self.cave = [[EMPTY for _ in range(CAVE_WIDTH)] for _ in range(4)]
+        self.cave = [[EMPTY for _ in range(CAVE_WIDTH)] for __ in range(4)]
         """An array of cave rows, where row 0 is the flor"""
 
     def move_rock_horizontal(self, direction: Direction):
         rock_edge = 0 if direction == Direction.LEFT else -1
-        if direction == Direction.LEFT:
-            cave_position_to_check = self.rock.position.x - 1
-        else:
-            cave_position_to_check = self.rock.position.x + ROCK_SIZE[self.rock.type].width
+        cave_offset = -1 if direction == Direction.LEFT else 1
         can_move = (
             (direction == Direction.LEFT and self.rock.position.x > 0)
             or (direction == Direction.RIGHT and self.rock.position.x + ROCK_SIZE[self.rock.type].width < CAVE_WIDTH)
-        ) and not any(
+        ) and all(
             # block starts at the top of the cave and we go down, that's why -y
-            self.cave[self.rock.position.y - y][cave_position_to_check] != EMPTY
+            self.cave[self.rock.position.y - y][self.rock.position.x + x + cave_offset] == EMPTY
             for y in range(self.rock.height)
-            if self.rock.shape[y][rock_edge] != EMPTY
+            for x in range(self.rock.width)
+            if self.rock.shape[y][x] != EMPTY
         )
 
         if can_move:
@@ -112,9 +111,10 @@ class Cave:
 
     def drop_rock(self) -> bool:
         can_drop = self.rock.position.y - self.rock.height >= FLOOR and all(
-            self.cave[self.rock.position.y - self.rock.height][self.rock.position.x + x] == EMPTY
+            self.cave[self.rock.position.y - y - 1][self.rock.position.x + x] == EMPTY
+            for y in range(self.rock.height)
             for x in range(self.rock.width)
-            if self.rock.shape[self.rock.height - 1][x] != EMPTY
+            if self.rock.shape[y][x] != EMPTY
         )
         if can_drop:
             self.rock.position.y -= 1
@@ -124,7 +124,7 @@ class Cave:
         next_rock_type = next(ROCKS)
         missing_height = (self.height + (ROCK_START_CLEARANCE + ROCK_SIZE[next_rock_type].height)) - len(self.cave)
         if missing_height > 0:
-            self.cave.extend([[EMPTY for _ in range(CAVE_WIDTH)] for _ in range(missing_height)])
+            self.cave.extend([[EMPTY for _ in range(CAVE_WIDTH)] for __ in range(missing_height)])
             self.rock = Rock(next_rock_type, Point(START_X, len(self.cave) - 1))
         if missing_height <= 0:
             self.rock = Rock(next_rock_type, Point(START_X, len(self.cave) - 1 + missing_height))
@@ -137,7 +137,7 @@ class Cave:
         return idx
 
     def print(self, final=False):
-        if self.height > 30 and not final:
+        if self.height > 105 and not final:
             return
         rows = []
         for row_idx, row in enumerate(self.cave):
@@ -164,7 +164,7 @@ class Cave:
         for y in range(height):
             for x in range(width):
                 if self.rock.shape[y][x] != EMPTY:
-                    self.cave[self.rock.position.y - y][self.rock.position.x + x] = SETTLED_ROCK_FRAGMENT
+                    self.cave[self.rock.position.y - y][self.rock.position.x + x] = self.rock.shape[y][x]
         self.rock = None
 
 
@@ -174,18 +174,19 @@ def load_data() -> str:
             return line.strip()
 
 
-def tetris(winds: str):
+def tetris(winds: str, max_rocks: int):
     cave = Cave()
     winds = cycle(winds)
     block_dropping = False
     blocks_dropped = 0
 
-    while blocks_dropped <= MAX_ROCKS:
+    progress = iter(tqdm(repeat((1)), total=max_rocks))
+    while blocks_dropped <= max_rocks:
         if block_dropping:
             wind = next(winds)
             rock_horizontal_direction = Direction.RIGHT if wind == ">" else Direction.LEFT
             cave.move_rock_horizontal(rock_horizontal_direction)
-            cave.print()
+            # cave.print()
             rock_moved_down = cave.drop_rock()
             if not rock_moved_down:
                 cave.stop_rock()
@@ -194,24 +195,29 @@ def tetris(winds: str):
             cave.spawn_new_rock()
             block_dropping = True
             blocks_dropped += 1
+            next(progress)
 
-        cave.print()
-    cave.print(True)
+        # cave.print()
+    # cave.print(True)
     print(f"Final height of the tower: {cave.height}")
     return cave.height
 
 
 def part_1():
+    MAX_ROCKS = 2022
     winds = load_data()
-    final_height = tetris(winds)
+    final_height = tetris(winds, MAX_ROCKS)
     print(f"part 1 result: {final_height}")
 
 
 def part_2():
-    pass
+    MAX_ROCKS = 1_000_000_000_000
+    winds = load_data()
+    final_height = tetris(winds, MAX_ROCKS)
+    print(f"part 1 result: {final_height}")
 
 
 if __name__ == "__main__":
     print(f"default gc: {gc.get_threshold()}")
     gc.set_threshold(267_829, 38_342, 16_893)
-    part_1()
+    part_2()
