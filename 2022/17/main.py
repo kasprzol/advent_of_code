@@ -131,10 +131,11 @@ class Cave:
 
     @property
     def height(self):
-        for idx, row in enumerate(self.cave):
-            if all(cell == EMPTY for cell in row):
+        for rev_idx, row in enumerate(reversed(self.cave), 1):
+            if any(cell != EMPTY for cell in row):
                 break
-        return idx
+        return len(self.cave) - rev_idx
+
 
     def print(self, final=False):
         if self.height > 105 and not final:
