@@ -53,7 +53,7 @@ rotation = {
 
 def load_input() -> tuple[list[list[str]], list[int | str]]:
     with open("test_input.txt" if TEST_DATA else "input.txt") as indata:
-        map = [[""]]  # rows start at 1 so insert a dummy row
+        map_ = [[""]]  # rows start at 1 so insert a dummy row
         route = ""
         reading_map = True
         for line in indata:
@@ -62,7 +62,7 @@ def load_input() -> tuple[list[list[str]], list[int | str]]:
                 continue
             line = line.rstrip()
             if reading_map:
-                map.append([EMPTY] + list(line))  # columns start 1 so insert a dummy column
+                map_.append([EMPTY] + list(line))  # columns start 1 so insert a dummy column
             else:
                 route = line
     instructions: list[int | str] = []
@@ -80,7 +80,7 @@ def load_input() -> tuple[list[list[str]], list[int | str]]:
     if number:
         instructions.append(int(number))
 
-    return map, instructions
+    return map_, instructions
 
 
 def find_starting_point(map) -> Point:
@@ -183,7 +183,7 @@ def point_to_cube_side(point: Point) -> int:
         else:
             return 5
     # 1, 3, 4
-    if CUBE_EDGE + 1 <= point.x <= 2 * CUBE_EDGE:
+    elif CUBE_EDGE + 1 <= point.x <= 2 * CUBE_EDGE:
         if point.y <= CUBE_EDGE:
             return 1
         elif CUBE_EDGE + 1 <= point.y <= 2 * CUBE_EDGE:
@@ -204,9 +204,9 @@ def side_point_0(side: int) -> Point:
     elif side == 4:
         return Point(CUBE_EDGE + 1, 2 * CUBE_EDGE + 1)
     elif side == 5:
-        return Point(0, 2 * CUBE_EDGE + 1)
+        return Point(1, 2 * CUBE_EDGE + 1)
     elif side == 6:
-        return Point(0, 3 * CUBE_EDGE + 1)
+        return Point(1, 3 * CUBE_EDGE + 1)
 
 
 def point_to_side_relative_point(p: Point, side: int) -> Point:
@@ -330,6 +330,7 @@ def move2(map: list[list[str]], current_position: Point, heading: HEADING, amoun
                 destination, heading = move_to_other_side(src_cube_side, current_position, heading)
         if map[destination.y][destination.x] == WALL:
             break
+        assert destination.x > 0 and destination.y > 0
         current_position = destination
 
         route_taken.append((destination, heading))
@@ -337,12 +338,12 @@ def move2(map: list[list[str]], current_position: Point, heading: HEADING, amoun
 
 
 def part_2():
-    map, instructions = load_input()
-    current_position = start = find_starting_point(map)
+    map_, instructions = load_input()
+    current_position = start = find_starting_point(map_)
     heading: HEADING = RIGHT
     route_taken = [(start, heading)]
     if VERBOSE >= 1:
-        print_map(map, route_taken, heading)
+        print_map(map_, route_taken, heading)
     if VERBOSE >= 2:
         print(instructions)
     if VERBOSE:
@@ -351,16 +352,16 @@ def part_2():
         iterable = tqdm(instructions)
     for instruction in iterable:
         if isinstance(instruction, int):
-            current_position, heading, extra_route = move2(map, current_position, heading, instruction)
+            current_position, heading, extra_route = move2(map_, current_position, heading, instruction)
             route_taken.extend(extra_route)
         else:
             heading = rotation[heading][instruction]
         if VERBOSE >= 2:
-            print_map(map, route_taken, heading)
+            print_map(map_, route_taken, heading)
     if VERBOSE >= 1:
-        print_map(map, route_taken, heading)
+        print_map(map_, route_taken, heading)
     facing_score = {RIGHT: 0, DOWN: 1, LEFT: 2, UP: 3}
-    print(f"part 1 result: {1000 * current_position.y + 4*current_position.x + facing_score[heading]}")
+    print(f"part 2 result: {1000 * current_position.y + 4*current_position.x + facing_score[heading]}")
 
 
 if __name__ == "__main__":
