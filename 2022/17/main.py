@@ -1,13 +1,15 @@
 import gc
-from itertools import cycle, repeat
+from collections import defaultdict
+from copy import deepcopy
+from dataclasses import dataclass
+from enum import Enum, auto
+from itertools import cycle, pairwise, repeat
 from typing import NamedTuple
+
 from rich import print
 from tqdm.rich import tqdm
 
-from dataclasses import dataclass
-from enum import Enum, auto
-
-from utils import Point
+from utils import MutablePoint
 
 EMPTY = "."
 SETTLED_ROCK_FRAGMENT = "\N{FULL BLOCK}"
@@ -41,7 +43,7 @@ class RockType(Enum):
 @dataclass
 class Rock:
     type: RockType
-    position: Point
+    position: MutablePoint
     shapes = {
         RockType.LINE: [[f"[red]{SETTLED_ROCK_FRAGMENT}[/red]"] * 4],
         RockType.PLUS: [
@@ -93,7 +95,6 @@ class Cave:
         """An array of cave rows, where row 0 is the flor"""
 
     def move_rock_horizontal(self, direction: Direction):
-        rock_edge = 0 if direction == Direction.LEFT else -1
         cave_offset = -1 if direction == Direction.LEFT else 1
         can_move = (
             (direction == Direction.LEFT and self.rock.position.x > 0)
@@ -125,17 +126,21 @@ class Cave:
         missing_height = (self.height + (ROCK_START_CLEARANCE + ROCK_SIZE[next_rock_type].height)) - len(self.cave)
         if missing_height > 0:
             self.cave.extend([[EMPTY for _ in range(CAVE_WIDTH)] for __ in range(missing_height)])
-            self.rock = Rock(next_rock_type, Point(START_X, len(self.cave) - 1))
+            self.rock = Rock(next_rock_type, MutablePoint(START_X, len(self.cave) - 1))
         if missing_height <= 0:
-            self.rock = Rock(next_rock_type, Point(START_X, len(self.cave) - 1 + missing_height))
+            self.rock = Rock(
+                next_rock_type,
+                MutablePoint(START_X, len(self.cave) - 1 + missing_height),
+            )
 
     @property
     def height(self):
-        for rev_idx, row in enumerate(reversed(self.cave), 1):
+        h = len(self.cave)
+        for row in reversed(self.cave):
             if any(cell != EMPTY for cell in row):
                 break
-        return len(self.cave) - rev_idx
-
+            h -= 1
+        return h
 
     def print(self, final=False):
         if self.height > 105 and not final:
@@ -170,7 +175,7 @@ class Cave:
 
 
 def load_data() -> str:
-    with open("input.txt") as indata:
+    with open("test_input.txt" if TEST_DATA else "input.txt") as indata:
         for line in indata:
             return line.strip()
 
@@ -181,7 +186,7 @@ def tetris(winds: str, max_rocks: int):
     block_dropping = False
     blocks_dropped = 0
 
-    progress = iter(tqdm(repeat((1)), total=max_rocks))
+    progress = iter(tqdm(repeat(1), total=max_rocks))
     while blocks_dropped <= max_rocks:
         if block_dropping:
             wind = next(winds)
@@ -204,6 +209,106 @@ def tetris(winds: str, max_rocks: int):
     return cave.height
 
 
+class CaveSnapshot(NamedTuple):
+    height: int
+    cave_state: list
+    rocks_dropped: int
+
+
+class Cycle(NamedTuple):
+    rock_type: RockType
+    wind_idx: int
+    height: int
+    rocks_dropped: int
+
+
+def tetris2(winds_input: str, max_rocks: int, height_to_start_searching_for_cycles: int):
+    cave = Cave()
+    winds = cycle(enumerate(winds_input))
+    block_dropping = False
+    blocks_dropped = wind_idx = 0
+
+    tetris_cycle = defaultdict(list)
+    found_cycle = None
+    cycle_applied = False
+    progress = iter(tqdm(repeat(1), total=max_rocks))
+    while blocks_dropped <= max_rocks:
+        if block_dropping:
+            wind_idx, wind = next(winds)
+            rock_horizontal_direction = Direction.RIGHT if wind == ">" else Direction.LEFT
+            cave.move_rock_horizontal(rock_horizontal_direction)
+            # cave.print()
+            rock_moved_down = cave.drop_rock()
+            if not rock_moved_down:
+                cave.stop_rock()
+                block_dropping = False
+        else:
+            cave.spawn_new_rock()
+            block_dropping = True
+            blocks_dropped += 1
+            next(progress)
+            # add board, wind, and next rock state to cycle detection
+            cave_height_for_snapshot = 400
+            cave_height_to_skip = 600 if TEST_DATA else 1_500  # skip before starting to look for cycles
+            if not found_cycle and cave.rock and cave.height > cave_height_to_skip:
+                tetris_cycle[(cave.rock.type, wind_idx % len(winds_input))].append(
+                    CaveSnapshot(
+                        cave.height,
+                        deepcopy(cave.cave[cave.height - cave_height_for_snapshot :]),
+                        blocks_dropped,
+                    )
+                )
+
+            if (
+                found_cycle
+                and not cycle_applied
+                and cave.rock.type == found_cycle.rock_type
+                and wind_idx % len(winds_input) == found_cycle.wind_idx
+            ):
+                # we're at the start of the cycle
+                missing_rocks = max_rocks - (blocks_dropped - 1)  # -1 as don't count the newly spawned rock
+                cycle_repetitions = (
+                    missing_rocks // found_cycle.rocks_dropped - 1
+                )  # 1 less repetition to avoid overshooting
+                print(
+                    f"Applying cycle: current dropped blocks: {blocks_dropped}. "
+                    f"Need {missing_rocks:,} rocks to drop -> {cycle_repetitions=:,}"
+                )
+                blocks_dropped += cycle_repetitions * found_cycle.rocks_dropped
+                cave_extra_height = cycle_repetitions * found_cycle.height
+                print(
+                    f"cycle applied: current dropped blocks: {blocks_dropped:,}. "
+                    f"Old height {cave.height:,}. Gained extra height {cave_extra_height:,}"
+                )
+                cycle_applied = True
+
+            if not found_cycle and cave.height >= height_to_start_searching_for_cycles:
+                print(f"Got {len(tetris_cycle)} possible cycles")
+                for (rock_type, wind_idx), cave_snapshots in tetris_cycle.items():
+                    if len(cave_snapshots) < 5:  # min repetitions
+                        continue
+                    diffs_heights = {p[1] - p[0] for p in pairwise(h.height for h in cave_snapshots)}
+                    diffs_blocks = {p[1] - p[0] for p in pairwise(h.rocks_dropped for h in cave_snapshots)}
+                    all_the_same = all(p[1] == p[0] for p in pairwise(h.cave_state for h in cave_snapshots))
+                    if len(diffs_heights) != 1 or len(diffs_blocks) != 1:
+                        print(f"Found strange cycle: {rock_type} at wind {wind_idx}: {diffs_heights=}, {diffs_blocks=}")
+                    print(f"Unique height differences: {diffs_heights}")
+                    print([snapshot.height for snapshot in cave_snapshots])
+                    print(f"Unique block count differences: {diffs_blocks} ({len(cave_snapshots)} total)")
+                    print([snapshot.rocks_dropped for snapshot in cave_snapshots])
+                    if all_the_same and len(diffs_heights) == 1 and len(diffs_blocks) == 1:
+                        print(
+                            f"All cave snapshots are the same!! {rock_type} at wind {wind_idx} ({len(cave_snapshots)} repetitions)"
+                        )
+                        found_cycle = Cycle(rock_type, wind_idx, diffs_heights.pop(), diffs_blocks.pop())
+                        print("\n".join("".join(foo) for foo in reversed(cave_snapshots[0].cave_state)))
+                        tetris_cycle.clear()
+                        break
+    print(f"{blocks_dropped=}")
+    print(f"{cave.height=:,} + {cave_extra_height=:,} = {cave.height + cave_extra_height:,}")
+    return cave.height + cave_extra_height
+
+
 def part_1():
     MAX_ROCKS = 2022
     winds = load_data()
@@ -213,9 +318,10 @@ def part_1():
 
 def part_2():
     MAX_ROCKS = 1_000_000_000_000
+    HEIGHT_TO_START_SEARCHING_FOR_CYCLES = 683 if TEST_DATA else 23_567
     winds = load_data()
-    final_height = tetris(winds, MAX_ROCKS)
-    print(f"part 1 result: {final_height}")
+    final_height = tetris2(winds, MAX_ROCKS, HEIGHT_TO_START_SEARCHING_FOR_CYCLES)
+    print(f"part 2 result: {final_height}")
 
 
 if __name__ == "__main__":
