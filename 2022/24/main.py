@@ -1,9 +1,8 @@
-from collections import defaultdict
-from dataclasses import dataclass, field
-from typing import Literal, Iterable
 import heapq
+from collections import defaultdict, deque
+from dataclasses import dataclass, field
+from typing import Iterable
 
-from tqdm.rich import tqdm
 from rich import print
 
 from utils import Point, Point3d
@@ -90,7 +89,13 @@ class Node:
         return self.coordinates < other.coordinates
 
 
-def generate_all_snapshots(valey_map, winds: dict[Point, str], start: Point, end: Point, starting_wind_cycle: int = 0):
+def generate_all_snapshots(
+    valey_map,
+    winds: dict[Point, str],
+    start: Point,
+    end: Point,
+    starting_wind_cycle: int = 0,
+):
     map_width = len(valey_map[0]) - 2  # substract the borders
     map_height = len(valey_map) - 2
     number_of_wind_cycles = lcm(map_height, map_width)
@@ -173,14 +178,6 @@ def dijkstra(nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]) -> d
                 distance[link] = distance[u.coordinates] + 1
                 parent[link] = u
                 heapq.heappush(queue, (distance[link], graph[link]))
-
-    # foo = end.coordinates
-    # way = [end]
-    # while foo != start.coordinates:
-    #     foo = parent[foo].coordinates
-    #     way.append(foo)
-    # print(f"{len(way)=}, {way}")
-    # print(f"ANSWER: need to take {len(way) - 1 } steps!!")
     return parent
 
 

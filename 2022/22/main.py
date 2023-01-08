@@ -87,9 +87,9 @@ def find_starting_point(map) -> Point:
     return Point(map[1].index(OPEN_TILE), 1)
 
 
-def print_map(map, route_taken: list[tuple[Point, HEADING]], final_heading: HEADING):
+def print_map(map_, route_taken: list[tuple[Point, HEADING]], final_heading: HEADING):
     canvas = []
-    for r, row in enumerate(map):
+    for r, row in enumerate(map_):
         canvas_row = []
         for c, cell in enumerate(row):
             if cell == EMPTY:
@@ -130,7 +130,7 @@ def move(map: list[list[str]], current_position: Point, heading: HEADING, amount
                 or destination.x >= len(map[destination.y])
                 or map[destination.y][destination.x] == EMPTY
             ):  # wrap around
-                for y in range(0, current_position.y):
+                for y in range(current_position.y):
                     if destination.x < len(map[y]) and map[y][destination.x] != EMPTY:
                         destination = Point(current_position.x, y)
                         break
