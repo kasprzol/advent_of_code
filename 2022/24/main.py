@@ -9,11 +9,11 @@ from rich import print
 from utils import Point, Point3d
 
 VERBOSE = 1
-TEST_DATA = True
+TEST_DATA = False
 
 EMPTY = "."
 WALL = "#"
-MAX_TIME = 128
+MAX_TIME = 512
 
 if TEST_DATA:
     ...
@@ -90,7 +90,7 @@ class Node:
         return self.coordinates < other.coordinates
 
 
-def generate_all_snapshots(valey_map, winds: dict[Point, str], start, end):
+def generate_all_snapshots(valey_map, winds: dict[Point, str], start: Point, end: Point, starting_wind_cycle: int = 0):
     map_width = len(valey_map[0]) - 2  # substract the borders
     map_height = len(valey_map) - 2
     number_of_wind_cycles = lcm(map_height, map_width)
@@ -116,14 +116,19 @@ def generate_all_snapshots(valey_map, winds: dict[Point, str], start, end):
                 assert wind not in wind_cycles[i][new_coord]
                 wind_cycles[i][new_coord].append(wind)
 
+    wind_cycles = deque(wind_cycles)
+    wind_cycles.rotate(-starting_wind_cycle)
+
     nodes: list[Node] = []
+    top_point = start if start.y == 0 else end
+    bottom_point = end if end.y == map_height + 1 else start
     # now generate the graph of possible moves
     neighbours = (Point(-1, 0), Point(1, 0), Point(0, -1), Point(0, 1))
     for i in range(MAX_TIME):
         next_cycle = (i + 1) % len(wind_cycles)
         for x in range(1, map_width + 1):
             for y in range(0, map_height + 2):
-                if (y == 0 and x != start.x) or (y == map_height + 1 and x != end.x):
+                if (y == 0 and x != top_point.x) or (y == map_height + 1 and x != bottom_point.x):
                     continue
                 node = Node(Point3d(x, y, i))
                 point = Point(x, y)
@@ -203,5 +208,72 @@ def part_1():
     print(f"shortest path: {len(shortest)} {shortest}")
 
 
+def part_2():
+    valey_map, winds = load_input()
+    start, end = find_starting_point(valey_map)
+    # print_map(valey_map, winds)
+    nodes, start_node, end_nodes = generate_all_snapshots(valey_map, winds, start, end)
+    parents = dijkstra(nodes, start_node, end_nodes)
+    paths = {}
+    for end_node in end_nodes:
+        end_node = end_node.coordinates
+        if end_node in parents:
+            paths[end_node] = []
+            node = end_node
+            while parents[node]:
+                paths[end_node].append(node)
+                node = parents[node].coordinates
+            paths[end_node].reverse()
+            if VERBOSE > 1:
+                print(f"Found a way to {end_node}")
+        else:
+            print(f"No way to {end_node}")
+
+    shortest = min(paths.values(), key=len)
+    print(f"shortest path: {len(shortest)} {shortest}")
+
+    nodes, start_node, end_nodes = generate_all_snapshots(valey_map, winds, end, start, len(shortest))
+    parents = dijkstra(nodes, start_node, end_nodes)
+    paths = {}
+    for end_node in end_nodes:
+        end_node = end_node.coordinates
+        if end_node in parents:
+            paths[end_node] = []
+            node = end_node
+            while parents[node]:
+                paths[end_node].append(node)
+                node = parents[node].coordinates
+            paths[end_node].reverse()
+            if VERBOSE > 1:
+                print(f"Found a way to {end_node}")
+        else:
+            print(f"No way to {end_node}")
+
+    shortest2 = min(paths.values(), key=len)
+    print(f"shortest path: {len(shortest2)} {shortest2}")
+
+    nodes, start_node, end_nodes = generate_all_snapshots(valey_map, winds, start, end, len(shortest) + len(shortest2))
+    parents = dijkstra(nodes, start_node, end_nodes)
+    paths = {}
+    for end_node in end_nodes:
+        end_node = end_node.coordinates
+        if end_node in parents:
+            paths[end_node] = []
+            node = end_node
+            while parents[node]:
+                paths[end_node].append(node)
+                node = parents[node].coordinates
+            paths[end_node].reverse()
+            if VERBOSE > 1:
+                print(f"Found a way to {end_node}")
+        else:
+            print(f"No way to {end_node}")
+
+    shortest3 = min(paths.values(), key=len)
+    print(f"shortest path: {len(shortest3)} {shortest3}")
+
+    print(f"Part 2 answer: {len(shortest) + len(shortest2) + len(shortest3)}")
+
+
 if __name__ == "__main__":
-    part_1()
+    part_2()
