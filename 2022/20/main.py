@@ -1,11 +1,12 @@
 from tqdm.rich import tqdm
 from rich import print
 
-VERBOSE = False
+VERBOSE = 0
+TEST_DATA = False
 
 
 def load_input():
-    with open("input.txt") as indata:
+    with open("test_input.txt" if TEST_DATA else "input.txt") as indata:
         return [int(line) for line in indata]
 
 
@@ -29,17 +30,19 @@ def part_1():
             # -1 because the 1st item (index 0) is already the last item
             # (i.e. it's after the last item because it's a circular buffer)
             new_index += len(numbers) - 1
-        new_index %= len(numbers)
-        if VERBOSE:
+        new_index %= len(numbers) - 1
+        if VERBOSE > 0:
             print(f"Moving number {number_and_idx[0]} from index {current_index} to {new_index}")
         del numbers[current_index]
         numbers.insert(new_index, number_and_idx)
-        if VERBOSE:
+        if VERBOSE > 1:
             print(f"Current buffer: {numbers}")
 
     zero = [num for num in numbers if num[0] == 0]
     assert len(zero) == 1
     zero_idx = numbers.index(zero[0])
+    if VERBOSE > 0:
+        print(f"Found zero at index x")
     coordinates_idx = (
         (zero_idx + 1000) % len(numbers),
         (zero_idx + 2000) % len(numbers),
