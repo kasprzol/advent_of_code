@@ -217,7 +217,7 @@ def point_to_side_relative_point(p: Point, side: int) -> Point:
     elif side == 3:
         return Point(p.x - CUBE_EDGE - 1, p.y - CUBE_EDGE - 1)
     elif side == 4:
-        return Point(p.x - 2 * CUBE_EDGE - 1, p.y - 2 * CUBE_EDGE - 1)
+        return Point(p.x - CUBE_EDGE - 1, p.y - 2 * CUBE_EDGE - 1)
     elif side == 5:
         return Point(p.x - 1, p.y - 2 * CUBE_EDGE - 1)
     elif side == 6:
@@ -304,6 +304,7 @@ def move2(map: list[list[str]], current_position: Point, heading: HEADING, amoun
     route_taken = []
     for _ in range(amount):
         src_cube_side = point_to_cube_side(current_position)
+        new_heading = heading
         if heading == UP:
             destination = Point(current_position.x, current_position.y - 1)
             if (
@@ -311,7 +312,7 @@ def move2(map: list[list[str]], current_position: Point, heading: HEADING, amoun
                 or destination.x >= len(map[destination.y])
                 or map[destination.y][destination.x] == EMPTY
             ):  # wrap around
-                destination, heading = move_to_other_side(src_cube_side, current_position, heading)
+                destination, new_heading = move_to_other_side(src_cube_side, current_position, heading)
         elif heading == DOWN:
             destination = Point(current_position.x, current_position.y + 1)
             if (
@@ -319,16 +320,18 @@ def move2(map: list[list[str]], current_position: Point, heading: HEADING, amoun
                 or destination.x >= len(map[destination.y])
                 or map[destination.y][destination.x] == EMPTY
             ):  # wrap around
-                destination, heading = move_to_other_side(src_cube_side, current_position, heading)
+                destination, new_heading = move_to_other_side(src_cube_side, current_position, heading)
         elif heading == RIGHT:
             destination = Point(current_position.x + 1, current_position.y)
             if destination.x == len(map[destination.y]) or map[destination.y][destination.x] == EMPTY:  # wrap around
-                destination, heading = move_to_other_side(src_cube_side, current_position, heading)
+                destination, new_heading = move_to_other_side(src_cube_side, current_position, heading)
         elif heading == LEFT:
             destination = Point(current_position.x - 1, current_position.y)
             if destination.x == 0 or map[destination.y][destination.x] == EMPTY:  # wrap around
-                destination, heading = move_to_other_side(src_cube_side, current_position, heading)
-        if map[destination.y][destination.x] == WALL:
+                destination, new_heading = move_to_other_side(src_cube_side, current_position, heading)
+        if map[destination.y][destination.x] != WALL:
+            heading = new_heading
+        else:
             break
         assert destination.x > 0 and destination.y > 0
         current_position = destination
