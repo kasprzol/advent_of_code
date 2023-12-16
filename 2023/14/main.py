@@ -154,18 +154,50 @@ def tilt(area, direction):
 CYCLES = 1_000_000_000
 
 
+def checksum(area):
+    import hashlib
+
+    h = hashlib.sha256()
+    for row in area:
+        h.update("".join(row).encode())
+    return h.hexdigest()
+
+
 def part2():
     value = 0
+    from collections import defaultdict
 
     area = read_input()
-    for i in trange(CYCLES, unit_scale=True):
+    seen_hashes = defaultdict(list)
+    for i in trange(1, CYCLES + 1, unit_scale=True):
         tilt(area, "N")
         tilt(area, "W")
         tilt(area, "S")
         tilt(area, "E")
         # print(f"After {i+1} cycles:")
         # print_area(area)
-    value = calculate_load(area)
+        if i > 1_000:
+            h = checksum(area)
+            seen_hashes[h].append(i)
+            if len(seen_hashes[h]) > 100:
+                print(f"Iterations for hash={h}: {seen_hashes[h]}")
+                break
+    print(seen_hashes.keys())
+    derivatives = [b - a for a, b in itertools.pairwise(seen_hashes[h])]
+    # print(derivatives)
+    derivatives = set(derivatives)
+    print(derivatives)
+    assert len(derivatives) == 1
+    derivative = derivatives.pop()
+    cycles_left = CYCLES - i
+    loops_left = cycles_left // derivative
+    for j in trange(i + loops_left * derivative, CYCLES):
+        tilt(area, "N")
+        tilt(area, "W")
+        tilt(area, "S")
+        tilt(area, "E")
+        value = calculate_load(area)
+        print(f"{j=}, {value=}")
 
     print(f"The value is {value}")
 
