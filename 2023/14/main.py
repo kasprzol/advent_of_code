@@ -6,6 +6,7 @@ import functools
 import itertools
 import tqdm
 from rich import print
+from tqdm.rich import trange
 
 MOVEABLE = "O"
 STATIONARY = "#"
@@ -85,7 +86,8 @@ def horizontal_enumerator(row, direction):
         h = len(row)
         for idx, it in enumerate(reversed(row), 1):
             yield h - idx, it
-    yield from enumerate(row)
+    else:
+        yield from enumerate(row)
 
 
 def vertical_enumerator(area, direction):
@@ -93,7 +95,8 @@ def vertical_enumerator(area, direction):
         h = len(area)
         for idx, it in enumerate(reversed(area), 1):
             yield h - idx, it
-    yield from enumerate(area)
+    else:
+        yield from enumerate(area)
 
 
 def tilt(area, direction):
@@ -119,43 +122,31 @@ def tilt(area, direction):
         for r, row in vertical_enumerator(area, direction):
             if r + direction_vertical < 0 or r + direction_vertical == area_h:
                 continue
-            for c, space in enumerate(row):
-                if c + direction_horizontal < 0 or c + direction_horizontal == area_w:
+            for c, space in horizontal_enumerator(row, direction):
+                if c + direction_horizontal < 0 or c + direction_horizontal == area_w or space != MOVEABLE:
                     continue
-                if space == MOVEABLE:
-                    if direction in ("N", "S"):
-                        i = r + direction_vertical
-                        while True:
-                            if area[i][c] != EMPTY:
-                                break
-                            if i > 0 and i < area_h:
-                                new_i = i + direction_vertical
-                                if (0 <= new_i < area_h) and area[new_i][c] == EMPTY:
-                                    i += direction_vertical
-                                else:
-                                    break
-                            else:
-                                break
-                        # i == -1 means we searched all above rows and all were empty
-                        if i == -1 or i == area_h or (i >= 0 and area[i][c] == EMPTY):
-                            area[min(max(i, 0), area_h - 1)][c], row[c] = space, EMPTY
-                            rocks_moved = True
-                    else:
-                        i = c + direction_horizontal
-                        while True:
-                            if area[r][i] != EMPTY:
-                                break
-                            if i > 0 and i < area_w:
-                                new_i = i + direction_horizontal
-                                if (0 <= new_i < area_w) and area[r][new_i] == EMPTY:
-                                    i += direction_horizontal
-                                else:
-                                    break
-                            else:
-                                break
-                        if i == -1 or i == area_w or (i >= 0 and area[r][i] == EMPTY):
-                            area[r][min(max(i, 0), area_w - 1)], row[c] = space, EMPTY
-                            rocks_moved = True
+                if direction in ("N", "S"):
+                    i = r + direction_vertical
+                    while area[i][c] == EMPTY:
+                        new_i = i + direction_vertical
+                        if (0 <= new_i < area_h) and area[new_i][c] == EMPTY:
+                            i += direction_vertical
+                        else:
+                            break
+                    if area[i][c] == EMPTY:
+                        area[i][c], row[c] = space, EMPTY
+                        rocks_moved = True
+                else:
+                    i = c + direction_horizontal
+                    while area[r][i] == EMPTY:
+                        new_i = i + direction_horizontal
+                        if (0 <= new_i < area_w) and area[r][new_i] == EMPTY:
+                            i += direction_horizontal
+                        else:
+                            break
+                    if area[r][i] == EMPTY:
+                        area[r][i], row[c] = space, EMPTY
+                        rocks_moved = True
             if rocks_moved:
                 break
 
