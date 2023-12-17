@@ -75,16 +75,19 @@ def print_ray(ray: Ray, cave, energized_tiles):
     print("")
 
 
-def trace_light(cave: list[str]) -> int:
-    active_rays = [Ray(Point(0, 0), Direction.RIGHT)]
+def trace_light(cave: list[str], starting_ray=None) -> int:
+    if not starting_ray:
+        starting_ray = Ray(Point(0, 0), Direction.RIGHT)
+
+    active_rays = [starting_ray]
     cave_h = len(cave)
     cave_w = len(cave[0])
     energized_tiles = defaultdict(set)
-    energized_tiles[Point(0, 0)] = {Direction.RIGHT}
+    energized_tiles[Point(starting_ray.p.r, starting_ray.p.c)] = {starting_ray.direction}
     while active_rays:
         ray = active_rays.pop()
         # print_ray(ray, cave, energized_tiles)
-        print(f"active_rays: {len(active_rays)}")
+        # print(f"active_rays: {len(active_rays)}")
         while True:
             tile = cave[ray.p.r][ray.p.c]
             energized_tiles[ray.p].add(ray.direction)
@@ -142,11 +145,33 @@ def part1():
 def part2():
     value = 0
 
+    cave = []
     for line in open("input.txt").readlines():
         line = line.strip()
+        cave.append(line)
+
+    rays = []
+    cave_h = len(cave)
+    cave_w = len(cave[0])
+    for i in range(cave_h):
+        ray = Ray(Point(i, 0), direction=Direction.RIGHT)
+        rays.append(ray)
+        ray = Ray(Point(i, cave_w - 1), direction=Direction.LEFT)
+        rays.append(ray)
+    for i in range(cave_w):
+        ray = Ray(Point(0, i), direction=Direction.DOWN)
+        rays.append(ray)
+        ray = Ray(Point(cave_h - 1, i), direction=Direction.UP)
+        rays.append(ray)
+
+    highest_ray = None
+    for ray in tqdm.tqdm(rays):
+        if (ray_value := trace_light(cave, starting_ray=ray)) > value:
+            value = ray_value
+            highest_ray = ray
 
     print(f"The value is {value}")
 
 
 if __name__ == "__main__":
-    part1()
+    part2()
