@@ -3,10 +3,13 @@ import dataclasses
 import enum
 from typing import NamedTuple
 from collections.abc import Iterable, Sequence
+from collections import defaultdict
 import functools
 import itertools
 import tqdm
 from rich import print
+from rich.console import Console
+from rich.text import Text
 
 
 class Point(NamedTuple):
@@ -33,12 +36,10 @@ class Ray:
     path: list[tuple[Point, Direction]] = dataclasses.field(default_factory=list)
 
     def __post_init__(self):
-        self.path.append((self.p, self.direction))
+        self.path.append(self.p)
 
     def set_point(self, new_p: Point):
-        new_path_segment = (new_p, self.direction)
-        if new_path_segment in self.path:
-            raise PointAlreadyInPathError()
+        new_path_segment = new_p
         self.path.append(new_path_segment)
         self.p = new_p
 
@@ -51,24 +52,26 @@ rotation = {
 }
 
 
-class PointAlreadyInPathError(Exception):
-    pass
+console = Console(highlight=False)
 
 
 def print_ray(ray: Ray, cave, energized_tiles):
-    from copy import deepcopy
-
     cave = [list(row) for row in cave]
     for tile in energized_tiles:
         cave[tile.r][tile.c] = "[yellow]#[/yellow]"
-    for p, _ in ray.path:
+    for p in ray.path:
         cave[p.r][p.c] = "[red]@[/red]"
     cave[p.r][p.c] = "[bright_magenta]*[/bright_magenta]"
 
+    nums = "".join(f"{i}         " for i in range(len(cave[0]) // 10))
+    print(f"     {nums}")
+    nums = "01234567890" * (len(cave[0]) // 10)
+    print(f"     {nums}")
     for row_idx, row in enumerate(cave):
         # avoid problem with rich like "\[red]"
-        row = "".join(row).replace("\\", "\\\\")
-        print(f"{row_idx:3}: {row}")
+        row = "".join(row).replace("\\", "\u2572")
+        # .replace("/", "\u2571")
+        console.print(f"{row_idx:3}: {row}")
     print("")
 
 
@@ -76,11 +79,29 @@ def trace_light(cave: list[str]) -> int:
     active_rays = [Ray(Point(0, 0), Direction.RIGHT)]
     cave_h = len(cave)
     cave_w = len(cave[0])
-    energized_tiles = {Point(0, 0)}
+    energized_tiles = defaultdict(set)
+    energized_tiles[Point(0, 0)] = {Direction.RIGHT}
     while active_rays:
         ray = active_rays.pop()
-        print_ray(ray, cave, energized_tiles)
+        # print_ray(ray, cave, energized_tiles)
+        print(f"active_rays: {len(active_rays)}")
         while True:
+            tile = cave[ray.p.r][ray.p.c]
+            energized_tiles[ray.p].add(ray.direction)
+            if tile in ("/", "\\"):
+                ray.direction = rotation[ray.direction][tile]
+            elif tile in ("-", "|"):
+                if not (
+                    (tile == "|" and ray.direction in (Direction.UP, Direction.DOWN))
+                    or (tile == "-" and ray.direction in (Direction.LEFT, Direction.RIGHT))
+                ):
+                    if tile == "|":
+                        ray.direction = Direction.DOWN
+                        active_rays.append(Ray(ray.p, Direction.UP, path=ray.path.copy()))
+                    else:
+                        ray.direction = Direction.RIGHT
+                        active_rays.append(Ray(ray.p, Direction.LEFT, path=ray.path.copy()))
+
             match ray.direction:
                 case Direction.UP:
                     next_point = Point(ray.p.r - 1, ray.p.c)
@@ -93,29 +114,12 @@ def trace_light(cave: list[str]) -> int:
             if next_point.r < 0 or next_point.r >= cave_w or next_point.c < 0 or next_point.c >= cave_h:
                 # light ray hit the cave wall
                 break
-            tile = cave[next_point.r][next_point.c]
-            energized_tiles.add(next_point)
-            try:
-                ray.set_point(next_point)
-            except PointAlreadyInPathError:
+            if next_point in energized_tiles and ray.direction in energized_tiles[next_point]:
+                # we have already visited this tile in this direction - skip it
                 break
-            if tile == ".":
-                continue
-            elif tile in ("/", "\\"):
-                ray.direction = rotation[ray.direction][tile]
-            else:  # "-" or "|"
-                if (tile == "|" and ray.direction in (Direction.UP, Direction.DOWN)) or (
-                    tile == "-" and ray.direction in (Direction.LEFT, Direction.RIGHT)
-                ):
-                    continue
-                if tile == "|":
-                    new_directions = (Direction.UP, Direction.DOWN)
-                else:
-                    new_directions = (Direction.RIGHT, Direction.LEFT)
-                for d in new_directions:
-                    active_rays.append(Ray(ray.p, d, path=ray.path.copy()))
-                break
-    print(energized_tiles)
+            ray.set_point(next_point)
+
+    # print(energized_tiles)
     return len(energized_tiles)
 
 
