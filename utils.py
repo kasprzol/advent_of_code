@@ -64,9 +64,7 @@ class Node:
         return self.coordinates < other.coordinates
 
 
-def dijkstra(
-    nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]
-) -> dict[Point3d, Node]:
+def dijkstra(nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]) -> dict[Point3d, Node]:
     """Implementation of Dijkstra graph path finding algorithm.
 
     Actually finds a route from the start node to all reachable nodes.
@@ -93,3 +91,50 @@ def dijkstra(
                 heapq.heappush(queue, (distance[link], graph[link]))
 
     return parent
+
+
+def range_intersection(range_a: tuple[int, int], range_b: tuple[int, int]):
+    """Return the result of intersection of 2 ranges of numbers.
+
+    The ranges are interpreted as (start, length).
+
+    Returns three values:
+    - a range before the intersection (or None)
+    - the intersection (or None)
+    - the range after the intersection (or None)
+    """
+    if range_a[0] > range_b[0]:
+        range_a, range_b = range_b, range_a
+
+    range_a_start = range_a[0]
+    range_b_start = range_b[0]
+    range_a_end = range_a[0] + range_a[1] - 1
+    range_b_end = range_b[0] + range_b[1] - 1
+
+    def start_end_to_start_length(start: int, end: int):
+        return start, end - start + 1
+
+    intersection_start = max(range_a_start, range_b_start)
+    intersection_end = min(range_a_end, range_b_end)
+
+    if intersection_start > intersection_end:
+        return range_a, None, range_b
+
+    intersection = start_end_to_start_length(intersection_start, intersection_end)
+
+    if range_a_start < intersection_start:
+        before_start = range_a_start
+        before_end = intersection_start - 1
+        assert before_start <= before_end
+        before = start_end_to_start_length(before_start, before_end)
+    else:
+        before = None
+
+    if intersection_end < range_a_end or intersection_end < range_b_end:
+        after_start = intersection_end + 1
+        after_end = max(range_a_end, range_b_end)
+        after = start_end_to_start_length(after_start, after_end)
+    else:
+        after = None
+
+    return before, intersection, after

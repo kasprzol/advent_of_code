@@ -2,9 +2,10 @@ import re
 import dataclasses
 from typing import NamedTuple
 from collections.abc import Iterable, Sequence
+import functools
 import itertools
 import tqdm
-
+from rich import print
 
 
 def part1():
