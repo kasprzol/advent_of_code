@@ -14,6 +14,16 @@ from rich import print
 
 VERBOSE = 1
 
+# The problem to solve is that while moving through the map (graph) we have to make between specified min and max
+# number of moves in the current before turning 90 degrees (can't move in the opposite direction).
+# Because of that we have to store 4 pieces of information for each node:
+# - it's (x,y) coordinates
+# - direction in which we're moving
+# - how many steps in this direction were already taken
+# this means that we have to create a 4D graph. For example, we moved into a node at (4,2) from (3,2)
+# (so moving right) and want to move to (5,2). This result in nodes with fallowing coordinates:
+# (3, 2, <any direction>, <any number of steps>) -> (4,2, right, 1) -> (5,2, right, 2)
+
 
 class Direction(enum.Enum):
     UP = "UP"
@@ -25,7 +35,7 @@ class Direction(enum.Enum):
     def values() -> Any:
         return (Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT)
 
-    # a dummy method to allow comparision
+    # a dummy method to allow comparison
     def __lt__(self, other):
         if not isinstance(other, Direction):
             return NotImplemented
@@ -79,7 +89,7 @@ def dijkstra(nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]) -> d
     :param nodes: an iterable of all the nodes in the graph.
     :param start: the start node.
     :param end_nodes: an iterable of end nodes.
-    :returns: a mapping of node to its parent (predecesor on the path.
+    :returns: a mapping of node to its parent (predecessor on the path).
     """
     graph = {node.coordinates: node for node in nodes}
     distance = defaultdict(lambda: 99_999_999)
@@ -104,11 +114,6 @@ def generate_graph(max_steps_in_one_direction=3):
     for line in open("input.txt").readlines():
         line = line.strip()
         area.append([int(i) for i in line])
-
-    # have to store 4 pieces of information for each node:
-    # it's coordinates
-    # from which direction we're entering this node
-    # how many steps in this direction were already taken
 
     graph: dict[Coordinate, Node] = {}
 

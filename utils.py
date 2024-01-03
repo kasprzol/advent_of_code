@@ -51,17 +51,60 @@ class Size:
     height: int
 
 
-@dataclass
+class Direction(enum.Enum):
+    UP = "UP"
+    DOWN = "DOWN"
+    LEFT = "LEFT"
+    RIGHT = "RIGHT"
+    NORTH = "UP"
+    SOUTH = "DOWN"
+    EAST = "RIGHT"
+    WEST = "LEFT"
+
+    @staticmethod
+    def values():
+        return (Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT)
+
+    # a dummy method to allow comparision
+    def __lt__(self, other):
+        if not isinstance(other, Direction):
+            return NotImplemented
+        return self.value < other.value
+
+    def reverse(self):
+        return DIRECTION_REVERSE[self.value]
+
+
+DIRECTION_REVERSE = {"UP": Direction.DOWN, "DOWN": Direction.UP, "LEFT": Direction.RIGHT, "RIGHT": Direction.LEFT}
+
+
+DIRECTION_TO_VECTOR = {
+    Direction.UP: Point(0, -1),
+    Direction.DOWN: Point(0, 1),
+    Direction.LEFT: Point(-1, 0),
+    Direction.RIGHT: Point(1, 0),
+}
+
+
+class Edge(NamedTuple):
+    target: Point3d
+    weight: int
+
+
+@dataclass(order=True)
 class Node:
     """A graph node class for use with the Dijkstra algorithm."""
 
     coordinates: Point3d
-    links: list[Point3d] = field(default_factory=list)
+    links: list[Edge] = field(default_factory=list, repr=False, init=False, compare=False)
 
-    def __lt__(self, other):
-        if not isinstance(other, Node):
-            return NotImplemented
-        return self.coordinates < other.coordinates
+    # def __lt__(self, other):
+    #     if not isinstance(other, Node):
+    #         return NotImplemented
+    #     return self.coordinates < other.coordinates
+
+    def __hash__(self) -> int:
+        return hash(self.coordinates)
 
 
 def dijkstra(nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]) -> dict[Point3d, Node]:
@@ -72,7 +115,7 @@ def dijkstra(nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]) -> d
     :param nodes: an iterable of all the nodes in the graph.
     :param start: the start node.
     :param end_nodes: an iterable of end nodes.
-    :returns: a mapping of node to its parent (predecesor on the path.
+    :returns: a mapping of node to its parent (predecesor on the path).
     """
     graph = {node.coordinates: node for node in nodes}
     distance = defaultdict(lambda: 99_999_999)
@@ -85,10 +128,10 @@ def dijkstra(nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]) -> d
         unused_dist, u = heapq.heappop(queue)
         for link in u.links:
             # TODO: support for edge weights (right now hardcoded as 1).
-            if distance[link] > distance[u.coordinates] + 1:
-                distance[link] = distance[u.coordinates] + 1
-                parent[link] = u
-                heapq.heappush(queue, (distance[link], graph[link]))
+            if (new_distance := distance[u.coordinates] + link.weight) < distance[link.target]:
+                distance[link.target] = new_distance
+                parent[link.target] = u
+                heapq.heappush(queue, (distance[link], graph[link.target]))
 
     return parent
 
