@@ -1,4 +1,5 @@
 import ast
+import copy
 import dataclasses
 import functools
 import itertools
@@ -126,14 +127,67 @@ def part1():
 ################################################################################
 
 
+def how_many_would_drop_if_removed(brick_to_be_removed: Brick, bricks: list[Brick], area) -> int:
+    """Given already settled bricks return the number of bricks that would fall if a given brick
+    were to be removed.
+
+    Basically the same thing as dump_bricks(), only it operates on already dumped area and counts
+    the bricks that would drop.
+    """
+    empty_space = (EMPTY, brick_to_be_removed.number)
+    bricks_dropped = 0
+    area = copy.deepcopy(area)
+    bricks = copy.deepcopy(bricks)
+    for brick in bricks:
+        if brick == brick_to_be_removed:
+            continue
+        new_z = brick.start.z
+        range_x = list(range(brick.start.x, brick.end.x + 1))
+        range_y = list(range(brick.start.y, brick.end.y + 1))
+        for test_z in range(brick.start.z - 1, 0, -1):
+            if all(area[test_x][test_y][test_z] in empty_space for test_x in range_x for test_y in range_y):
+                new_z = test_z
+            else:
+                break
+        diff_z = brick.start.z - new_z
+        if diff_z:
+            bricks_dropped += 1
+            # clear the old area of the brick
+            for x in range_x:
+                for y in range_y:
+                    for z in range(brick.start.z, brick.end.z + 1):
+                        area[x][y][z] = EMPTY
+            brick.start.z -= diff_z
+            brick.end.z -= diff_z
+
+            for x in range_x:
+                for y in range_y:
+                    for z in range(brick.start.z, brick.end.z + 1):
+                        area[x][y][z] = brick.number
+
+    return bricks_dropped
+
+
 def part2():
     value = 0
 
-    for line in open("input.txt").readlines():
-        line = line.strip()
+    bricks, area_size = load_bricks()
+    area = [[[EMPTY] * (area_size[2] + 1) for y in range(area_size[1] + 1)] for x in range(area_size[0] + 1)]
+
+    print(bricks)
+    # now bricks are sorted from lowest to highest
+    bricks.sort()
+    print(bricks)
+    for idx, brick in enumerate(bricks, 1):
+        brick.number = idx
+
+    dump_bricks(bricks, area)
+
+    for brick in bricks:
+        value += how_many_would_drop_if_removed(brick, bricks, area)
 
     print(f"The value is {value}")
 
 
 if __name__ == "__main__":
-    part1()
+    part2()
