@@ -104,14 +104,62 @@ def part1():
 ################################################################################
 
 
+def read_input2():
+    workflows = {}
+
+    workflow_r = re.compile(r"(?P<name>\w+)\{(?P<rules>[^}]+)\}")
+    for line in open("input.txt").readlines():
+        line = line.strip()
+        if line == "":
+            break
+
+        match = workflow_r.match(line)
+        assert match
+        workflows[match["name"]] = match["rules"]
+
+    rule_r = re.compile(r"(?P<category>[xmas])(?P<sign><|>)(?P<constant>\d+):(?P<goto_label>\w+)")
+    parsed_workflows = {}
+    for workflow_name in workflows:
+        string_rules = workflows[workflow_name].split(",")
+        parsed_rules = []
+        for rule_str in string_rules:
+            if match := rule_r.match(rule_str):
+                rule = match["category"], match["sign"], int(match["constant"]), match["goto_label"]
+            else:
+                # just a goto label
+                rule = (rule_str,)
+            parsed_rules.append(rule)
+        parsed_workflows[workflow_name] = parsed_rules
+
+    return parsed_workflows
+
+
 def part2():
     value = 0
 
-    for line in open("input.txt").readlines():
-        line = line.strip()
+    workflows = read_input2()
+    all_branches_expanded = False
+    space = {}
+    starting_workflow = "in"
+    current_workflow = starting_workflow
+    for workflow in workflows:
+        subtree = {}
+        for rule in workflows[workflow]:
+            if len(rule) == 1:
+                # subtree = rule
+                subtree[""] = rule[0]
+            else:
+                subtree[(rule[0], rule[1], rule[2])] = rule[3]
+        space[workflow] = subtree
+
+    while not all_branches_expanded:
+        break
+    # go throuht the tree. have a data structure to represent a set of ranges of accepted values,
+    # starting with (1,4000). At each
+    # tree branch make a copy of it and adjust the ranges. recurse until "A" or "R"
 
     print(f"The value is {value}")
 
 
 if __name__ == "__main__":
-    part1()
+    part2()
