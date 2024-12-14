@@ -13,6 +13,16 @@ class Point(NamedTuple):
             return NotImplemented
         return Point(self.x + other.x, self.y + other.y)
 
+    def __eq__(self, other):
+        if not (isinstance(other, MutablePoint) or isinstance(other, Point)):
+            return NotImplemented
+        return self.x == other.x and self.y == other.y
+
+    def __ne__(self, other):
+        if not (isinstance(other, MutablePoint) or isinstance(other, Point)):
+            return NotImplemented
+        return not self == other
+
 
 class Point3d(NamedTuple):
     x: int
@@ -36,6 +46,16 @@ class MutablePoint:
         self.x += other.x
         self.y += other.y
         return self
+
+    def __eq__(self, other):
+        if not (isinstance(other, MutablePoint) or isinstance(other, Point)):
+            return NotImplemented
+        return self.x == other.x and self.y == other.y
+
+    def __ne__(self, other):
+        if not (isinstance(other, MutablePoint) or isinstance(other, Point)):
+            return NotImplemented
+        return not self == other
 
 
 @dataclass
