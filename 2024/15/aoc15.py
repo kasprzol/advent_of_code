@@ -120,7 +120,7 @@ def load_input(indata: TextIOWrapper):
         if reading_map:
             if "@" in line:
                 col = line.index("@")
-                robot = MutablePoint(row_idx, col)
+                robot = MutablePoint(col,row_idx)
                 line = line.replace("@", ".")
             map.append(list(line))
         else:
