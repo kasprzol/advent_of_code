@@ -92,9 +92,16 @@ class Direction(enum.StrEnum):
         return DIRECTION_REVERSE[self.value]
 
 
-DIRECTION_REVERSE = {"UP": Direction.DOWN, "DOWN": Direction.UP, "LEFT": Direction.RIGHT, "RIGHT": Direction.LEFT,
-        "^": Direction.DOWN, "v": Direction.UP, "<": Direction.RIGHT, ">": Direction.LEFT,
-        }
+DIRECTION_REVERSE = {
+    "UP": Direction.DOWN,
+    "DOWN": Direction.UP,
+    "LEFT": Direction.RIGHT,
+    "RIGHT": Direction.LEFT,
+    "^": Direction.DOWN,
+    "v": Direction.UP,
+    "<": Direction.RIGHT,
+    ">": Direction.LEFT,
+}
 
 DIRECTION_TO_VECTOR = {
     Direction.UP: Point(0, -1),
@@ -136,7 +143,9 @@ class Node:
         return hash(self.coordinates)
 
 
-def dijkstra(nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]) -> tuple[dict[Coordinate, Node], dict[Coordinate, int]]:
+def dijkstra(
+    nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]
+) -> tuple[dict[Coordinate, Node], dict[Coordinate, int]]:
     """Implementation of Dijkstra graph path finding algorithm.
 
     Actually finds a route from the start node to all reachable nodes.
@@ -164,7 +173,6 @@ def dijkstra(nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]) -> t
     return parent, distance
 
 
-
 def load_input(indata: TextIOWrapper):
     map = []
     start = end = None
@@ -183,6 +191,7 @@ def load_input(indata: TextIOWrapper):
         map.append(list(line))
     return map, start, end
 
+
 # TODO: graph of inplace rotations (clockwise or counterclockwise 90 degrees at a time) and only moves forward
 def make_graph(area, start: Point, end: Point):
     graph: dict[Coordinate, Node] = {}
@@ -195,12 +204,12 @@ def make_graph(area, start: Point, end: Point):
     for r, row in enumerate(area):
         for c, cell in enumerate(row):
             # for going_straight in (True, False):
-                for direction in Direction.values():
-                    coord = Coordinate(x=c, y=r, direction=direction)
-                    blocked = cell != EMPTY
-                    node = Node(coord, is_blocked=blocked)
-                    graph[coord] = node
-                    nodes.append(node)
+            for direction in Direction.values():
+                coord = Coordinate(x=c, y=r, direction=direction)
+                blocked = cell != EMPTY
+                node = Node(coord, is_blocked=blocked)
+                graph[coord] = node
+                nodes.append(node)
 
     # this will kill the GC (a graph of cycles and cycles) so disable it
     gc.collect()
@@ -209,7 +218,7 @@ def make_graph(area, start: Point, end: Point):
     for r in trange(area_h, desc="rows"):
         for c in trange(area_w, desc="columns"):
             # for going_straight in (True, False):
-                # direction from which we get on to this node
+            # direction from which we get on to this node
             if area[r][c] == WALL:
                 continue
             for direction in Direction.values():
@@ -219,7 +228,7 @@ def make_graph(area, start: Point, end: Point):
                 nx = c + direction_vector[0]
                 ny = r + direction_vector[1]
                 if (0 <= nx < area_w) and (0 <= ny < area_h) and area[ny][nx] == EMPTY:
-                # if nx < 0 or nx >= area_w or ny < 0 or ny >= area_h or area[ny][nx] == WALL:
+                    # if nx < 0 or nx >= area_w or ny < 0 or ny >= area_h or area[ny][nx] == WALL:
                     neighbour_coord = Coordinate(x=nx, y=ny, direction=direction)
                     if neighbour_coord in graph:
                         node.links.append(Edge(neighbour_coord, POINTS_STRAIGHT))
@@ -234,10 +243,7 @@ def make_graph(area, start: Point, end: Point):
     start_coord = Coordinate(x=start.x, y=start.y, direction=Direction.RIGHT)
     starting_node = graph[start_coord]
 
-    end_nodes = [
-        graph[Coordinate(x=end.x, y=end.y, direction=d)]
-        for d in Direction.values()
-    ]
+    end_nodes = [graph[Coordinate(x=end.x, y=end.y, direction=d)] for d in Direction.values()]
     return graph, nodes, starting_node, end_nodes
 
 
@@ -261,9 +267,89 @@ def part1(input_file: TextIOWrapper):
     print(f"Part 1: {min_score:,}")
 
 
+def dijkstra2(
+    nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]
+) -> tuple[dict[Coordinate, list[Node]], dict[Coordinate, int]]:
+    """Implementation of Dijkstra graph path finding algorithm.
+
+    Actually finds a route from the start node to all reachable nodes.
+
+    :param nodes: an iterable of all the nodes in the graph.
+    :param start: the start node.
+    :param end_nodes: an iterable of end nodes.
+    :returns: a mapping of node to its parent (predecesor on the path).
+    """
+    graph = {node.coordinates: node for node in nodes}
+    distance: dict[Coordinate, int] = defaultdict(lambda: 999_999_999)
+    distance[start.coordinates] = 0
+    parent: dict[Coordinate, list[Node]] = {start.coordinates: None}
+    queue: list[tuple[int, Node]] = [(0, start)]
+    for end_node in end_nodes:
+        heapq.heappush(queue, (9999_9999_9999_9999, end_node))
+    while queue:
+        unused_dist, u = heapq.heappop(queue)
+        for link in u.links:
+            if (new_distance := distance[u.coordinates] + link.weight) < distance[link.target]:
+                distance[link.target] = new_distance
+                parent[link.target] = [u]
+                heapq.heappush(queue, (distance[link.target], graph[link.target]))
+            elif (new_distance := distance[u.coordinates] + link.weight) == distance[link.target]:
+                parent[link.target].append(u)
+                heapq.heappush(queue, (distance[link.target], graph[link.target]))
+
+    return parent, distance
+
+
+part2_parents = {}
+
+
+@functools.cache
+def calculare_score_helper(point) -> set[Point]:
+    i = point
+    distinct_points = {Point(i.coordinates.x, i.coordinates.y)}
+    junctions_to_check = [i]
+    while junctions_to_check:
+        i = junctions_to_check.pop()
+        distinct_points |= {Point(i.coordinates.x, i.coordinates.y)}
+        if part2_parents[i.coordinates] is None:
+            continue
+        for parent in part2_parents[i.coordinates]:
+            distinct_points |= calculare_score_helper(parent)
+    return distinct_points
+
+
 def part2(input_file: TextIOWrapper):
-    warehouse, robot, robot_moves = load_input2(input_file)
-    print(f"Part 2: {gps}")
+    area, start, end = load_input(input_file)
+    assert area
+    assert start
+    assert end
+    graph, nodes, starting_node, end_nodes = make_graph(area, start, end)
+    parents, distance = dijkstra2(nodes, starting_node, end_nodes=end_nodes)
+
+    part2_parents.update(parents)
+
+    min_score = 999_999_999_999_999
+    min_score_end_node = end_nodes[0]
+    for end_node in end_nodes:
+        print(f"Parents of end node {end_node.coordinates}:")
+        if end_node.coordinates not in parents:
+            print(f"[red]End node {end_node} not found in parents![/red]")
+            continue
+        if (dist := distance[end_node.coordinates]) < min_score:
+            min_score = dist
+            min_score_end_node = end_node
+
+    i = min_score_end_node
+    # distinct_points = {(i.coordinates.x, i.coordinates.y)}
+    # junctions_to_check = [i]
+    # while junctions_to_check:
+    #     i = junctions_to_check.pop()
+    #     distinct_points |= {(i.coordinates.x, i.coordinates.y)}
+    #     if parents[i.coordinates]:
+    #         junctions_to_check.extend(parents[i.coordinates])
+    distinct_points = calculare_score_helper(i)
+
+    print(f"Part 2: {len(distinct_points):,}")
 
 
 def main():
