@@ -192,7 +192,6 @@ def load_input(indata: TextIOWrapper):
     return map, start, end
 
 
-# TODO: graph of inplace rotations (clockwise or counterclockwise 90 degrees at a time) and only moves forward
 def make_graph(area, start: Point, end: Point):
     graph: dict[Coordinate, Node] = {}
 

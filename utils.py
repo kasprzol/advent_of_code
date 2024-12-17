@@ -151,7 +151,7 @@ def dijkstra(nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]) -> d
             if (new_distance := distance[u.coordinates] + link.weight) < distance[link.target]:
                 distance[link.target] = new_distance
                 parent[link.target] = u
-                heapq.heappush(queue, (distance[link], graph[link.target]))
+                heapq.heappush(queue, (distance[link.target], graph[link.target]))
 
     return parent
 
