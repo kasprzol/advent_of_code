@@ -25,7 +25,7 @@ VERBOSE = False
 def load_input(indata: TextIOWrapper):
     program = []
     registers = {"A": 0, "B": 0, "C": 0}
-    register_re = re.compile(r"Register (A|B|C): (\d+)")
+    register_re = re.compile(r"Register ([ABC]): (\d+)")
     for row_idx, line in enumerate(indata):
         line = line.strip()
         if not line:
@@ -122,7 +122,6 @@ class CPU:
 
 def part1(input_file: TextIOWrapper):
     registers, program = load_input(input_file)
-    halted = False
     cpu = CPU(registers, program)
     while not cpu.halted:
         cpu.clock()
@@ -132,38 +131,6 @@ def part1(input_file: TextIOWrapper):
     print(f"Part 1: {','.join(outputs)}")
 
 
-def part2(input_file: TextIOWrapper):
-    area, start, end = load_input(input_file)
-    assert area
-    assert start
-    assert end
-    graph, nodes, starting_node, end_nodes = make_graph(area, start, end)
-    parents, distance = dijkstra2(nodes, starting_node, end_nodes=end_nodes)
-
-    part2_parents.update(parents)
-
-    min_score = 999_999_999_999_999
-    min_score_end_node = end_nodes[0]
-    for end_node in end_nodes:
-        print(f"Parents of end node {end_node.coordinates}:")
-        if end_node.coordinates not in parents:
-            print(f"[red]End node {end_node} not found in parents![/red]")
-            continue
-        if (dist := distance[end_node.coordinates]) < min_score:
-            min_score = dist
-            min_score_end_node = end_node
-
-    i = min_score_end_node
-    # distinct_points = {(i.coordinates.x, i.coordinates.y)}
-    # junctions_to_check = [i]
-    # while junctions_to_check:
-    #     i = junctions_to_check.pop()
-    #     distinct_points |= {(i.coordinates.x, i.coordinates.y)}
-    #     if parents[i.coordinates]:
-    #         junctions_to_check.extend(parents[i.coordinates])
-    distinct_points = calculare_score_helper(i)
-
-    print(f"Part 2: {len(distinct_points):,}")
 
 
 def main():
