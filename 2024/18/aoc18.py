@@ -289,7 +289,40 @@ def part2(input_file: TextIOWrapper):
         bytes_until_no_path += 1
 
     blocker = corrupted_bytes[bytes_until_no_path]
-    print(f"Found the blocker {blocker}")
+    print(f"Found the blocker {blocker} ({bytes_until_no_path})")
+
+    print(f"Part 2: {blocker.x},{blocker.y}")
+
+
+def _bisect_check_if_there_is_a_path(corrupted_bytes, start, end):
+    area = make_area(corrupted_bytes)
+    graph, nodes, starting_node, end_nodes = make_graph(area, start, end)
+    parents, distance = dijkstra(nodes, starting_node, end_nodes=end_nodes)
+
+    if end_nodes[0].coordinates not in parents:
+        return False
+    return True
+
+
+def _bisect(corrupted_bytes, low, high, start, end):
+    if low == high:
+        return low
+    elif low == high - 1:
+        return low
+    mid = low + (high - low) // 2
+    if _bisect_check_if_there_is_a_path(corrupted_bytes[:mid], start, end):
+        return _bisect(corrupted_bytes, mid, high, start, end)
+    else:
+        return _bisect(corrupted_bytes, low, mid, start, end)
+
+
+def part2_bisect(input_file: TextIOWrapper):
+    corrupted_bytes = load_input2(input_file)
+    start = Point(0, 0)
+    end = Point(y=AREA_H - 1, x=AREA_W - 1)
+    bytes_until_no_path = _bisect(corrupted_bytes, 0, len(corrupted_bytes), start, end)
+    blocker = corrupted_bytes[bytes_until_no_path]
+    print(f"Found the blocker {blocker} ({bytes_until_no_path})")
 
     print(f"Part 2: {blocker.x},{blocker.y}")
 
@@ -305,7 +338,7 @@ def main():
     if arguments.part == 1:
         part1(arguments.input)
     elif arguments.part == 2:
-        part2(arguments.input)
+        part2_bisect(arguments.input)
 
 
 if __name__ == "__main__":
