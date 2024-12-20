@@ -36,6 +36,21 @@ class Point(NamedTuple):
             return NotImplemented
         return Point(self.x + other.x, self.y + other.y)
 
+    def __eq__(self, other):
+        if not (isinstance(other, MutablePoint) or isinstance(other, Point)):
+            return NotImplemented
+        return self.x == other.x and self.y == other.y
+
+    def __ne__(self, other):
+        if not (isinstance(other, MutablePoint) or isinstance(other, Point)):
+            return NotImplemented
+        return not self == other
+
+    def distance(self, other):
+        if not (isinstance(other, Point) or isinstance(other, MutablePoint)):
+            raise NotImplementedError(f"Can't take distance of Point and {type(other)}")
+        return abs(self.x - other.x) + abs(self.y - other.y)
+
 
 @dataclass
 class MutablePoint:
@@ -312,23 +327,62 @@ def part1(input_file: TextIOWrapper):
     print(f"Part 1: {num_of_cheats_above_100:,}")
 
 
+def generate_area_with_distances(distances: dict[Coordinate, int], track_time: int, area_w: int, area_h: int):
+    area_with_distances = []
+    for i in range(area_h):
+        area_with_distances.append([-1] * area_w)
+    for node, node_dist in distances.items():
+        area_with_distances[node.y][node.x] = track_time - node_dist
+    return area_with_distances
+
+
 def part2(input_file: TextIOWrapper):
-    corrupted_bytes = load_input2(input_file)
-    start = Point(0, 0)
-    end = Point(y=AREA_H - 1, x=AREA_W - 1)
-    for bytes_until_no_path in trange(len(corrupted_bytes)):
-        area = make_area(corrupted_bytes[: bytes_until_no_path + 1])
-        graph, nodes, starting_node, end_nodes = make_graph(area, start, end)
-        parents, distance = dijkstra(nodes, starting_node, end_nodes=end_nodes)
+    area, start, end = load_input(input_file)
 
-        if end_nodes[0].coordinates not in parents:
-            break
-        bytes_until_no_path += 1
+    # first compute the normal track's time
+    graph, nodes, starting_node, end_nodes = make_graph(area, start, end)
+    parents, distance = dijkstra(nodes, starting_node, end_nodes=end_nodes)
+    track_time = distance[end_nodes[0].coordinates]
+    if VERBOSE:
+        print(f"Time of track: {track_time}")
 
-    blocker = corrupted_bytes[bytes_until_no_path]
-    print(f"Found the blocker {blocker} ({bytes_until_no_path})")
+    # Create a map where values are distance to end (-1 for walls). For each step on the
+    # path from start to finish, check all points in distance <=20 and check what we can gain
+    # by going the cheat route.
+    # NOTE: include the distance of the cheat shortcut in calculations! Basically subtract
+    # the distance from the current point from the path saved.
+    area_h = len(area)
+    area_w = len(area[0])
+    area_with_distances = generate_area_with_distances(distance, track_time, area_w, area_h)
 
-    print(f"Part 2: {blocker.x},{blocker.y}")
+    step_coord = end_nodes[0].coordinates
+    cheat_times = collections.Counter()
+    progress = tqdm(desc="steps", total=track_time)
+    while step_coord in parents and parents[step_coord] is not None:
+        current_step_as_point = Point(step_coord.x, step_coord.y)
+        step_distance_to_end = area_with_distances[current_step_as_point.y][current_step_as_point.x]
+        for x in range(max(0, step_coord.x - 20, min(area_h, step_coord.x + 20 + 1))):
+            for y in range(max(0, step_coord.y - 20, min(area_w, step_coord.y + 20 + 1))):
+                if area_with_distances[y][x] == -1:
+                    continue
+                distance_to_cheat_from_step = current_step_as_point.distance(Point(x, y))
+                if distance_to_cheat_from_step > 20:
+                    continue
+                # time saved = distance from the far point (cheat start) to the race end - distance of the current point
+                # (cheat end) to the end - length of the cheat
+                time_saved = area_with_distances[y][x] - step_distance_to_end - distance_to_cheat_from_step
+                if time_saved > 0:
+                    cheat_times[time_saved] += 1
+
+        progress.update(1)
+        step_coord = parents[step_coord].coordinates
+
+    num_of_cheats_above_100 = 0
+    for i in sorted(cheat_times):
+        print(f"there are {cheat_times[i]} cheats that save {i}")
+        if i >= 100:
+            num_of_cheats_above_100 += cheat_times[i]
+    print(f"Part 2: {num_of_cheats_above_100:,}")
 
 
 def main():
