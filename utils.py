@@ -23,6 +23,11 @@ class Point(NamedTuple):
             return NotImplemented
         return not self == other
 
+    def distance(self, other):
+        if not (isinstance(other, Point) or isinstance(other, MutablePoint)):
+            raise NotImplementedError(f"Can't take distance of Point and {type(other)}")
+        return abs(self.x - other.x) + abs(self.y - other.y)
+
 
 class Point3d(NamedTuple):
     x: int
