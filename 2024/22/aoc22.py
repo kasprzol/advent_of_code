@@ -18,7 +18,7 @@ from typing import Iterable, NamedTuple
 
 from rich import print
 from rich.pretty import pprint
-from tqdm.rich import tqdm, trange
+from tqdm import tqdm, trange
 
 VERBOSE = False
 
@@ -63,7 +63,62 @@ def part1(input_file: TextIOWrapper):
 
 
 def part2(input_file: TextIOWrapper):
-    print(f"Part 2: {0:,}")
+    secret_numbers = load_input(input_file)
+    secret_number_iterations = 2000
+    result = 0
+    buyers_prices = []
+    buyers_diffs = []
+    for buyer in tqdm(secret_numbers, desc="computing buyers"):
+        initial = buyer
+        prices = [initial % 10]
+        for _ in range(secret_number_iterations):
+            buyer = generate_new_secret(buyer)
+            prices.append(buyer % 10)
+        buyers_prices.append(prices)
+        diffs = [pair[1] - pair[0] for pair in itertools.pairwise(prices)]
+        assert len(diffs) == secret_number_iterations
+        buyers_diffs.append(diffs)
+        prices_to_diffs = defaultdict(set)
+        # we're only interested in the first occurrence of a diff
+        seen_diffs = set()
+        for i in range(4, secret_number_iterations + 1):
+            diff = tuple(diffs[i - 4 : i])
+            if diff not in seen_diffs:
+                prices_to_diffs[prices[i]].add(diff)
+                seen_diffs.add(diff)
+        buyers_price_to_diff.append(prices_to_diffs)
+
+    # make sure the diffs are unique (as we're looking for the 1st diff for each buyer)
+
+    best_profit = 0
+    best_diff = None
+    for buyer_idx, price_to_diff in tqdm(
+        enumerate(buyers_price_to_diff), desc="Finding best diff", total=len(buyers_price_to_diff)
+    ):
+        for price in price_to_diff:
+            for diff in price_to_diff[price]:
+                diff_profit = calculate_profit_for_diff(diff)
+                if diff_profit > best_profit:
+                    best_profit = diff_profit
+                    best_diff = diff
+
+    # 1514 -- too high
+    print(f"Part 2: {best_profit=:,} for {best_diff=}")
+
+
+buyers_price_to_diff = []
+
+
+# TODO: sort the diff in each price and use bisect to find it
+@functools.cache
+def calculate_profit_for_diff(diff):
+    result = 0
+    for buyer in buyers_price_to_diff:
+        for price in buyer:
+            if diff in buyer[price]:
+                result += price
+                break
+    return result
 
 
 def main():
