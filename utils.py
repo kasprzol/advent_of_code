@@ -161,6 +161,49 @@ def dijkstra(nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]) -> d
     return parent
 
 
+# Klika – podgraf, w którym każde dwa wierzchołki są połączone krawędzią.
+# Klika jest maksymalna, jeśli nie da się dodać do niej wierzchołka tak, aby razem z nią również tworzył klikę. Klika
+# jest największa (najliczniejsza), jeśli nie ma w grafie kliki o większej liczbie wierzchołków.
+# https://en.wikipedia.org/wiki/Clique_(graph_theory)
+# https://en.wikipedia.org/wiki/Bron%E2%80%93Kerbosch_algorithm
+# The recursion is initiated by setting R and X to be the empty set and P to be the vertex set of the graph.
+def bron_kerbosch(r: set[str], p: set[str], x: set[str], graph: dict[str, set[str]]) -> list[set[str]]:
+    """
+    Bron-Kerbosch algorithm to find maximal cliques in an undirected graph.
+
+    :param R: Current clique (set of nodes in the clique found so far).
+    :param P: Candidates to extend the clique.
+    :param X: Excluded nodes (nodes that should not be considered for extension).
+    :param graph: The graph as a dictionary where the keys are node identifiers and the values are sets of neighboring nodes.
+    """
+    results = []
+    if len(p) == 0 and len(x) == 0:
+        return [r]
+    p, orig_p = set(p), p
+    x = set(x)
+    for vertex in orig_p:  # don't modify while being iterated over
+        v = {vertex}
+        result = bron_kerbosch(r | v, p & graph[vertex], x & graph[vertex], graph=graph)
+        if result:
+            results.extend(result)
+        p -= v
+        x |= v
+    return results
+
+
+def find_maximal_cliques(graph):
+    """
+    Function to initiate Bron-Kerbosch algorithm.
+
+    :param graph: The graph as a dictionary where the keys are node identifiers and the values are sets of neighboring nodes.
+    """
+    P = set(graph.keys())  # All nodes are candidates initially
+    X = set()  # No nodes are excluded initially
+    R = set()  # No nodes in the clique initially
+
+    return bron_kerbosch(R, P, X, graph)
+
+
 def range_intersection(range_a: tuple[int, int], range_b: tuple[int, int]):
     """Return the result of intersection of 2 ranges of numbers.
 
