@@ -131,6 +131,71 @@ def part1(input_file: TextIOWrapper):
     print(f"Part 1: {','.join(outputs)}")
 
 
+def part2(input_file: TextIOWrapper):
+    import multiprocessing
+
+    registers, program = load_input(input_file)
+    # decompile(program)
+    last_good = [0]
+    for required_output in range(1, len(program) + 1):
+        good = []
+        for g in last_good:
+            for candidate in range(8):
+                registers["A"] = g * 8 + candidate
+                cpu = CPU(registers, program)
+                while not cpu.halted:
+                    cpu.clock()
+                if cpu.outputs == program[-required_output:]:
+                    good.append(g * 8 + candidate)
+        last_good = good
+
+    print(f"part 2: {sorted(last_good)}")
+
+
+def decompile(program):
+    def combo(i):
+        match i:
+            case num if 0 <= num <= 3:
+                return f"{num}"
+            case 4:
+                return "A"
+            case 5:
+                return "B"
+            case 6:
+                return "C"
+            case _:
+                return "<INVALID combo parameter>"
+
+    with open("decompile.txt", "w") as f:
+        f.write(",".join([str(j) for j in program]))
+        f.write("\n\n")
+        for ip, (opcode, operand) in zip(range(0, 10_000_000, 2), itertools.batched(program, 2)):
+            match opcode:
+                case 0:
+                    f.write(
+                        f"{ip:3}: A = A // 2 ** {combo(operand)}\t\t; combo({operand}) ; adv ; {opcode=}; {operand=}"
+                    )
+                case 1:
+                    f.write(f"{ip:3}: B = B ^ {operand}\t\t; bxl ; {opcode=}; {operand=}")
+                case 2:
+                    f.write(f"{ip:3}: B = {combo(operand)} % 8\t\t; combo({operand}) ; bst ; {opcode=}; {operand=}")
+                case 3:
+                    f.write(f"{ip:3}: if A != 0: goto {operand}\t\t; jnz ; {opcode=}; {operand=}")
+                case 4:
+                    f.write(f"{ip:3}: B = B ^ C\t\t; bxc ; {opcode=}; {operand=}")
+                case 5:
+                    f.write(f"{ip:3}: out({combo(operand)} % 8)\t\t; combo({operand}) ; out ; {opcode=}; {operand=}")
+                case 6:
+                    f.write(
+                        f"{ip:3}: B = A // 2 ** {combo(operand)}\t\t; combo({operand})  ; bdv ; {opcode=}; {operand=}"
+                    )
+                case 7:
+                    f.write(
+                        f"{ip:3}: C = A // 2 ** {combo(operand)}\t\t; combo({operand})  ; cdv ; {opcode=}; {operand=}"
+                    )
+                case _:
+                    f.write(f"{ip:3}: INVALID INSTRUCTION; {opcode=}; {operand=}")
+            f.write("\n")
 
 
 def main():
