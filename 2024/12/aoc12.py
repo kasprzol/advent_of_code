@@ -96,6 +96,20 @@ class Region:
                 return True
         return False
 
+    def print(self, area_w, area_h):
+        for x in range(area_w):
+            print(f"{x%10}", end="")
+        print("")
+        for y in range(area_h):
+            print(f"{y:2}: ", end="")
+            for x in range(area_w):
+                p = Point(x, y)
+                if p in self.points:
+                    print(f"[blue]{self.name}[/blue]", end="")
+                else:
+                    print("[gray].[/gray]", end="")
+            print("")
+
 
 def load_input(indata: TextIOWrapper):
     area = []
@@ -109,35 +123,51 @@ def load_input(indata: TextIOWrapper):
     return area, region_names
 
 
-def find_regions(area) -> dict[str, list[Region]]:
-    regions: dict[str, list[Region]] = {}
+def ingest_region(p: Point, area) -> Region:
+    area_h = len(area)
+    area_w = len(area[0])
+    r = Region(area[p.y][p.x])
+    r.points.add(p)
+    points_to_check = {p}
+    while points_to_check:
+        current = points_to_check.pop()
+        same_region_neighbours = 0
+        for d in Direction.values():
+            new_neighbour = current + DIRECTION_TO_VECTOR[d]
+            if (
+                0 <= new_neighbour.x < area_w
+                and 0 <= new_neighbour.y < area_h
+                and area[new_neighbour.y][new_neighbour.x] == r.name
+            ):
+                if new_neighbour not in r.points:
+                    r.points.add(new_neighbour)
+                    points_to_check.add(new_neighbour)
+                same_region_neighbours += 1
+        r.perimeter += 4 - same_region_neighbours
+
+    if len(r.points) == 1:
+        r.perimeter = 4
+    assert len(r.points) > 0
+    assert r.area > 0
+    assert r.perimeter > 0
+    return r
+
+
+def find_regions_new(area) -> dict[str, list[Region]]:
+    visited_points = set()
+    regions = {}
     area_h = len(area)
     area_w = len(area[0])
     for ridx, row in enumerate(area):
         for cidx, cell in enumerate(row):
-            point = Point(x=cidx, y=ridx)
-            same_name_neighbours = 0
-            # Find a region of cell plants that is a neighbour of this point. If there is none, then create a new one.
-            if cell not in regions:
-                region = Region(name=cell)
-                regions[cell] = [region]
-            else:
-                for r in reversed(regions[cell]):
-                    if r.is_connected(point):
-                        region = r
-                        break
-                else:
-                    region = Region(name=cell)
-                    regions[cell].append(region)
-
-            for direction in Direction.values():
-                neighbour = point + DIRECTION_TO_VECTOR[direction]
-                if 0 <= neighbour.x < area_w and 0 <= neighbour.y < area_h:
-                    if area[neighbour.y][neighbour.x] == cell:  # and neighbour not in regions[cell].points:
-                        same_name_neighbours += 1
-            point_perimeter = 4 - same_name_neighbours
-            region.points.add(point)
-            region.perimeter += point_perimeter
+            p = Point(x=cidx, y=ridx)
+            if p in visited_points:
+                continue
+            new_region = ingest_region(p, area)
+            if VERBOSE:
+                new_region.print(area_w, area_h)
+            visited_points.update(new_region.points)
+            regions.setdefault(new_region.name, []).append(new_region)
     return regions
 
 
@@ -145,12 +175,19 @@ def part1(input_file: TextIOWrapper):
     area, region_names = load_input(input_file)
 
     price = 0
-    regions = find_regions(area)
-    for name, small_regions in regions.items():
-        for region in small_regions:
+    if VERBOSE:
+        print("Finding regions.")
+    regions = find_regions_new(area)
+    if VERBOSE:
+        print("Final calculations.")
+    for name in regions:
+        for region in regions[name]:
             if VERBOSE:
-                print(f"Region {name}. Area: {region.area}\t perimeter: {region.perimeter}\tprice: {region.price}")
+                print(
+                    f"Region [yellow]{name}[/yellow]. Area: {region.area}\t perimeter: {region.perimeter}\tprice: {region.price}"
+                )
             price += region.price
+
     print(f"Part 1: {price:,}")
 
 
