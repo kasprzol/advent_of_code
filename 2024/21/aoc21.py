@@ -232,6 +232,29 @@ NUMERICAL_KEYPAD_CONTROL = {
     },
 }
 
+NUMERICAL_STATES_VIA_DIRECTIONAL = {
+    "A": {UP: "3", LEFT: "0"},
+    "0": {UP: "2", RIGHT: "A"},
+    "1": {UP: "4", RIGHT: "2"},
+    "2": {UP: "5", RIGHT: "3", LEFT: "1", DOWN: "0"},
+    "3": {UP: "6", LEFT: "2", DOWN: "A"},
+    "4": {UP: "7", RIGHT: "5", DOWN: "1"},
+    "5": {UP: "8", RIGHT: "6", LEFT: "4", DOWN: "2"},
+    "6": {UP: "9", LEFT: "5", DOWN: "3"},
+    "7": {DOWN: "4", RIGHT: "8"},
+    "8": {DOWN: "5", RIGHT: "9", LEFT: "7"},
+    "9": {DOWN: "6", LEFT: "8"},
+}
+"""States of the numerical keypad that can be reached by directional moves."""
+
+DIRECTIONAL_STATES_VIA_DIRECTIONAL = {
+    "A": {LEFT: UP, DOWN: RIGHT},
+    UP: {RIGHT: "A", DOWN: DOWN},
+    LEFT: {RIGHT: DOWN},
+    DOWN: {LEFT: LEFT, UP: UP, RIGHT: RIGHT},
+    RIGHT: {LEFT: DOWN, UP: "A"},
+}
+
 
 def swap_inner_dicts(top_level: dict[str, dict[str] : tuple[str, ...]]) -> dict[str, dict[tuple[str, ...], str]]:
     ret = {}
@@ -247,68 +270,53 @@ DIRECTIONAL_STATE_TRANSITIONS = swap_inner_dicts(DIRECTIONAL_KEYPAD_CONTROL)
 NUMERICAL_STATE_TRANSITIONS = swap_inner_dicts(NUMERICAL_KEYPAD_CONTROL)
 
 
-# @functools.cache
-def _get_sequence_length_helper(
-    current_robot_number: int, key_to_press: str, robot_states: list[str], previous_robot_pressed_action: bool
-) -> tuple[int, tuple[str, ...]]:
-    """
-    :param previous_robot_pressed_action: did the robot controlling this one press action?
-    """
-
-    # if it is the first controlling robot, then it just needs to make the moves on numerical keypad
-    if current_robot_number == 0:
-        return 0, tuple()
-    input_sequence = DIRECTIONAL_KEYPAD_CONTROL[robot_states[current_robot_number]][key_to_press]
-    new_state = DIRECTIONAL_STATE_TRANSITIONS[robot_states[current_robot_number]][input_sequence]
-    if current_robot_number == len(robot_states) - 1:
-        robot_states[current_robot_number] = new_state
-        return len(input_sequence), input_sequence
-    # robot controlling the robot controlling the numerical keypad - that one uses directional keypad
-    else:
-        if previous_robot_pressed_action:
-            robot_states[current_robot_number] = new_state
-        ret = 0
-        output_sequence = []
-        for key in input_sequence:
-            result = _get_sequence_length_helper(
-                current_robot_number + 1, key, robot_states, key == ACTION and previous_robot_pressed_action
-            )
-            ret += result[0]
-            output_sequence.extend(result[1])
-        return ret, tuple(output_sequence)
-
-
-def get_sequence_length(key_to_press: str, robot_states: list[str]) -> int:
-    """
-    Returns the length of the sequence of keys to press to have the last robot press a given button (key_to_press).
-    :param robot_states: List of keys each robot is pointing to (robot 0 is the one with numerical keyboard).
-    """
-    key_to_press_by_last_control_robot = NUMERICAL_KEYPAD_CONTROL[robot_states[0]][key_to_press]
-    ret = 0
-    for key in key_to_press_by_last_control_robot:
-        res = _get_sequence_length_helper(1, key, robot_states, key == ACTION)
-        ret += res[0]
-        print(f"{key}: {res[1]}")
-        robot_states[len(robot_states) - 1] = key
+def worker_helper(directional_robot_sequence: str, number_of_robots: int, controlled_robot_state: str) -> list[str]:
+    ret = []
+    # each robot starts on ACTION
+    controlled_robot_state = ACTION
+    for key in directional_robot_sequence:
+        intermediate_keys = DIRECTIONAL_KEYPAD_CONTROL[controlled_robot_state][key]
+        if number_of_robots == 1:
+            ret.extend(intermediate_keys)
+        else:
+            helper_result = worker_helper(intermediate_keys, number_of_robots - 1, controlled_robot_state)
+            ret.extend(helper_result)
+        controlled_robot_state = key
     return ret
+
+
+def part1_work(door_code: str, number_of_robots) -> list[str]:
+    numerical_robot_state = "A"
+    sequences = []
+    for key in door_code:
+        sequence_for_numerical_robot = NUMERICAL_KEYPAD_CONTROL[numerical_robot_state][key]
+        sequence = worker_helper(sequence_for_numerical_robot, number_of_robots, ACTION)
+        sequences.extend(sequence)
+        numerical_robot_state = key
+    return sequences
+
+
+def numeric_part(door_code: str) -> int:
+    number = int("".join([i for i in door_code if i.isnumeric()]))
+    print(f"{door_code} -> {number}")
+    return number
 
 
 # TODO: trzeba pamiętać pozycję pośrednich robotów - one idą do action tylko, jak wydają polecenie wciśnięcia, a tak
 #  to cały czas są poza tym guzikiem.
 def part1(input_file: TextIOWrapper):
     door_codes = load_input(input_file)
-    number_of_robots = 3
-    # number of keypads: 1 (human) directional + (number_of_robots-1) directional + 1 numerical
-    number_of_keyboards = number_of_robots
+    number_of_directional_robots = 2
+    # number of keypads: 1 (human) directional + (number_of_directional_robots-1) directional + 1 numerical
+    result = 0
     for door_code in door_codes:
-        robot_moves = 0
-        robot_states = [ACTION] * number_of_robots
-        for code_char in door_code:
-            robot_moves += get_sequence_length(code_char, robot_states)
-            robot_states[0] = code_char
-        print(f"For door code {door_code} the length of the sequence is {robot_moves}.")
+        robot_moves = part1_work(door_code, number_of_directional_robots)
+        value = numeric_part(door_code)
+        complexity = value * len(robot_moves)
+        print(f"{door_code}: {"".join(robot_moves)}\t{len(robot_moves)}\t{complexity}")
+        result += complexity
 
-    print(f"Part 1: {0:,}")
+    print(f"Part 1: {result:,}")
 
 
 def part2(input_file: TextIOWrapper):
