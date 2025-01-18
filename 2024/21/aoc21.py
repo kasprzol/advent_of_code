@@ -1,6 +1,7 @@
 import argparse
 import collections
 import concurrent.futures
+import contextlib
 import enum
 import functools
 import gc
@@ -44,39 +45,39 @@ def load_input(indata: TextIOWrapper):
 # DIRECTIONAL_KEYPAD_CONTROL[BAR][FOO] = "<^>vA"
 DIRECTIONAL_KEYPAD_CONTROL = {
     UP: {
-        ACTION: (RIGHT, ACTION),
-        UP: (ACTION,),
-        DOWN: (DOWN, ACTION),
-        LEFT: (DOWN, LEFT, ACTION),
-        RIGHT: (DOWN, RIGHT, ACTION),
+        ACTION: (">A",),
+        UP: ("A",),
+        DOWN: ("vA",),
+        LEFT: ("v<A",),
+        RIGHT: ("v>A", ">vA"),
     },
     DOWN: {
-        ACTION: (RIGHT, UP, ACTION),
-        UP: (UP, ACTION),
-        DOWN: (ACTION,),
-        LEFT: (LEFT, ACTION),
-        RIGHT: (RIGHT, ACTION),
+        ACTION: (">^A", "^>A"),
+        UP: ("^A",),
+        DOWN: (f"{ACTION}",),
+        LEFT: (f"{LEFT}{ACTION}",),
+        RIGHT: (f"{RIGHT}{ACTION}",),
     },
     LEFT: {
-        ACTION: (RIGHT, RIGHT, UP, ACTION),
-        UP: (RIGHT, UP, ACTION),
-        DOWN: (RIGHT, ACTION),
-        LEFT: (ACTION,),
-        RIGHT: (RIGHT, RIGHT, ACTION),
+        ACTION: (">>^A", ">^>A"),
+        UP: (">^A",),
+        DOWN: (">A",),
+        LEFT: ("A",),
+        RIGHT: (">>A",),
     },
     RIGHT: {
-        ACTION: (UP, ACTION),
-        UP: (LEFT, UP, ACTION),
-        DOWN: (LEFT, ACTION),
-        LEFT: (LEFT, LEFT, ACTION),
-        RIGHT: (ACTION,),
+        ACTION: ("^A",),
+        UP: ("<^A", "^<A"),
+        DOWN: ("<A",),
+        LEFT: ("<<A",),
+        RIGHT: ("A",),
     },
     ACTION: {
-        ACTION: (ACTION,),
-        UP: (LEFT, ACTION),
-        DOWN: (LEFT, DOWN, ACTION),
-        LEFT: (DOWN, LEFT, LEFT, ACTION),
-        RIGHT: (DOWN, ACTION),
+        ACTION: ("A",),
+        UP: ("<A",),
+        DOWN: ("<vA", "v<A"),
+        LEFT: ("v<<A", "<v<A"),
+        RIGHT: ("vA",),
     },
 }
 
@@ -86,224 +87,189 @@ DIRECTIONAL_KEYPAD_CONTROL = {
 NUMERICAL_KEYPAD_CONTROL = {
     ACTION: {
         ACTION: (ACTION,),
-        "0": (LEFT, ACTION),
-        "1": (UP, LEFT, LEFT, ACTION),
-        "2": (UP, LEFT, ACTION),
-        "3": (UP, ACTION),
-        "4": (UP, UP, LEFT, LEFT, ACTION),
-        "5": (UP, UP, LEFT, ACTION),
-        "6": (UP, UP, ACTION),
-        "7": (UP, UP, UP, LEFT, LEFT, ACTION),
-        "8": (UP, UP, UP, LEFT, ACTION),
-        "9": (UP, UP, UP, ACTION),
+        "0": ("<A",),
+        "1": ("^<<A",),  # "<^<A"
+        "2": ("^<A", "<^A"),
+        "3": ("^A",),
+        "4": ("^^<<A",),  # "<^<^A", "<^^<A", "^<<^A"
+        "5": ("^^<A", "<^^A"),  # ^<^A
+        "6": ("^^A",),
+        "7": ("^^^<<A",),  # ^<^<^A,  "<^^^<A"
+        "8": ("^^^<A", "<^^^A"),  # ...
+        "9": ("^^^A",),
     },
     "0": {
-        ACTION: (RIGHT, ACTION),
+        ACTION: (">A",),
         "0": (ACTION,),
-        "1": (UP, LEFT, ACTION),
-        "2": (UP, ACTION),
-        "3": (UP, RIGHT, ACTION),
-        "4": (UP, UP, LEFT, ACTION),
-        "5": (UP, UP, ACTION),
-        "6": (UP, UP, RIGHT, ACTION),
-        "7": (UP, UP, UP, LEFT, ACTION),
-        "8": (UP, UP, UP, ACTION),
-        "9": (UP, UP, UP, RIGHT, ACTION),
+        "1": ("^<A",),
+        "2": ("^A",),
+        "3": ("^>A", ">^A"),
+        "4": ("^^<A",),
+        "5": ("^^A",),
+        "6": ("^^>A", ">^^A"),
+        "7": ("^^^<A",),
+        "8": ("^^^A",),
+        "9": ("^^^>A", ">^^^A"),
     },
     "1": {
-        ACTION: (RIGHT, RIGHT, DOWN, ACTION),
-        "0": (RIGHT, DOWN, ACTION),
+        ACTION: (">>vA",),
+        "0": (">vA",),
         "1": (ACTION,),
-        "2": (RIGHT, ACTION),
-        "3": (RIGHT, RIGHT, ACTION),
-        "4": (UP, ACTION),
-        "5": (UP, RIGHT, ACTION),
-        "6": (UP, RIGHT, RIGHT, ACTION),
-        "7": (UP, UP, ACTION),
-        "8": (UP, UP, RIGHT, ACTION),
-        "9": (UP, UP, RIGHT, RIGHT, ACTION),
+        "2": (">A",),
+        "3": (">>A",),
+        "4": ("^A",),
+        "5": ("^>A", ">^A"),
+        "6": ("^>>A", ">>^A"),
+        "7": ("^^A",),
+        "8": ("^^>A", ">^^A"),
+        "9": ("^^>>A", ">>^^A"),
     },
     "2": {
-        ACTION: (RIGHT, DOWN, ACTION),
-        "0": (DOWN, ACTION),
-        "1": (
-            LEFT,
-            ACTION,
-        ),
+        ACTION: (">vA", "v>A"),
+        "0": ("vA",),
+        "1": ("<A",),
         "2": (ACTION,),
-        "3": (RIGHT, ACTION),
-        "4": (UP, LEFT, ACTION),
-        "5": (UP, ACTION),
-        "6": (UP, RIGHT, ACTION),
-        "7": (UP, UP, LEFT, ACTION),
-        "8": (UP, UP, ACTION),
-        "9": (UP, UP, RIGHT, ACTION),
+        "3": (">A",),
+        "4": ("^<A", "<^A"),
+        "5": ("^A",),
+        "6": ("^>A", ">^A"),
+        "7": ("^^<A", "<^^A"),
+        "8": ("^^A",),
+        "9": (">^^A", "^^>A"),
     },
     "3": {
-        ACTION: (DOWN, ACTION),
-        "0": (DOWN, LEFT, ACTION),
-        "1": (LEFT, LEFT, ACTION),
-        "2": (LEFT, ACTION),
+        ACTION: ("vA",),
+        "0": ("v<A", "<vA"),
+        "1": ("<<A",),
+        "2": ("<A",),
         "3": (ACTION,),
-        "4": (UP, LEFT, LEFT, ACTION),
-        "5": (UP, LEFT, ACTION),
-        "6": (UP, ACTION),
-        "7": (UP, UP, LEFT, LEFT, ACTION),
-        "8": (UP, UP, LEFT, ACTION),
-        "9": (UP, UP, ACTION),
+        "4": ("^<<A", "<<^A"),
+        "5": ("^<A", "<^A"),
+        "6": ("^A",),
+        "7": ("^^<<A", "<<^^A"),
+        "8": ("^^<A", "<^^A"),
+        "9": ("^^A",),
     },
     "4": {
-        ACTION: (RIGHT, RIGHT, DOWN, DOWN, ACTION),
-        "0": (RIGHT, DOWN, DOWN, ACTION),
-        "1": (DOWN, ACTION),
-        "2": (DOWN, RIGHT, ACTION),
-        "3": (DOWN, RIGHT, RIGHT, ACTION),
+        ACTION: (">>vvA",),
+        "0": (">vvA",),
+        "1": ("vA",),
+        "2": ("v>A", ">vA"),
+        "3": ("v>>A", ">>vA"),
         "4": (ACTION,),
-        "5": (RIGHT, ACTION),
-        "6": (RIGHT, RIGHT, ACTION),
-        "7": (UP, ACTION),
-        "8": (UP, RIGHT, ACTION),
-        "9": (UP, RIGHT, RIGHT, ACTION),
+        "5": (">A",),
+        "6": (">>A",),
+        "7": ("^A",),
+        "8": ("^>A", ">^A"),
+        "9": ("^>>A", ">>^A"),
     },
     "5": {
-        ACTION: (RIGHT, DOWN, DOWN, ACTION),
-        "0": (DOWN, DOWN, ACTION),
-        "1": (DOWN, LEFT, ACTION),
-        "2": (DOWN, ACTION),
-        "3": (DOWN, RIGHT, ACTION),
-        "4": (LEFT, ACTION),
+        ACTION: (">vvA", "vv>A"),
+        "0": ("vvA",),
+        "1": ("<vA", "v<A"),
+        "2": ("vA",),
+        "3": (">vA", "v>A"),
+        "4": ("<A",),
         "5": (ACTION,),
-        "6": (RIGHT, ACTION),
-        "7": (UP, LEFT, ACTION),
-        "8": (UP, ACTION),
-        "9": (UP, RIGHT, ACTION),
+        "6": (">A",),
+        "7": ("^<A", "<^A"),
+        "8": ("^A",),
+        "9": ("^>A", ">^A"),
     },
     "6": {
-        ACTION: (DOWN, DOWN, ACTION),
-        "0": (DOWN, DOWN, LEFT, ACTION),
-        "1": (DOWN, LEFT, LEFT, ACTION),
-        "2": (DOWN, LEFT, ACTION),
-        "3": (DOWN, ACTION),
-        "4": (LEFT, LEFT, ACTION),
-        "5": (LEFT, ACTION),
-        "6": (ACTION,),
-        "7": (UP, LEFT, LEFT, ACTION),
-        "8": (UP, LEFT, ACTION),
-        "9": (UP, ACTION),
+        ACTION: ("vvA",),
+        "0": ("vv<A", "<vvA"),
+        "1": ("<<vA", "v<<A"),
+        "2": ("v<A", "<vA"),
+        "3": ("vA",),
+        "4": ("<<A",),
+        "5": ("<A",),
+        "6": ("A",),
+        "7": ("^<<A", "<<^A"),
+        "8": ("^<A", "<^A"),
+        "9": ("^A",),
     },
     "7": {
-        ACTION: (RIGHT, RIGHT, DOWN, DOWN, DOWN, ACTION),
-        "0": (RIGHT, DOWN, DOWN, DOWN, ACTION),
-        "1": (DOWN, DOWN, ACTION),
-        "2": (DOWN, DOWN, RIGHT, ACTION),
-        "3": (DOWN, DOWN, RIGHT, RIGHT, ACTION),
-        "4": (DOWN, ACTION),
-        "5": (DOWN, RIGHT, ACTION),
-        "6": (DOWN, RIGHT, RIGHT, ACTION),
-        "7": (ACTION,),
-        "8": (RIGHT, ACTION),
-        "9": (RIGHT, RIGHT, ACTION),
+        ACTION: (">>vvvA",),
+        "0": (">vvvA",),
+        "1": ("vvA",),
+        "2": ("vv>A", ">vvA"),
+        "3": ("vv>>A", ">>vvA"),
+        "4": ("vA",),
+        "5": (">vA", "v>A"),
+        "6": (">>vA", "v>>A"),
+        "7": ("A",),
+        "8": (">A",),
+        "9": (">>A",),
     },
     "8": {
-        ACTION: (RIGHT, DOWN, DOWN, DOWN, ACTION),
-        "0": (DOWN, DOWN, DOWN, ACTION),
-        "1": (DOWN, DOWN, LEFT, ACTION),
-        "2": (DOWN, DOWN, ACTION),
-        "3": (DOWN, DOWN, RIGHT, ACTION),
-        "4": (DOWN, LEFT, ACTION),
-        "5": (DOWN, ACTION),
-        "6": (DOWN, RIGHT, ACTION),
-        "7": (LEFT, ACTION),
-        "8": (ACTION,),
-        "9": (RIGHT, ACTION),
+        ACTION: (">vvvA", "vvv>A"),
+        "0": ("vvvA",),
+        "1": ("<vvA", "vv<A"),
+        "2": ("vvA",),
+        "3": (">vvA", "vv>A"),
+        "4": ("<vA", "v<A"),
+        "5": ("vA",),
+        "6": (">vA", "v>A"),
+        "7": ("<A",),
+        "8": ("A",),
+        "9": (">A",),
     },
     "9": {
-        ACTION: (DOWN, DOWN, DOWN, ACTION),
-        "0": (DOWN, DOWN, DOWN, LEFT, ACTION),
-        "1": (DOWN, DOWN, LEFT, LEFT, ACTION),
-        "2": (DOWN, DOWN, LEFT, ACTION),
-        "3": (DOWN, DOWN, ACTION),
-        "4": (DOWN, LEFT, LEFT, ACTION),
-        "5": (DOWN, LEFT, ACTION),
-        "6": (DOWN, ACTION),
-        "7": (LEFT, LEFT, ACTION),
-        "8": (LEFT, ACTION),
-        "9": (ACTION,),
+        ACTION: ("vvvA",),
+        "0": ("vvv<A", "<vvvA"),
+        "1": ("<<vvA", "vv<<A"),
+        "2": ("vv<A", "<vvA"),
+        "3": ("vvA",),
+        "4": ("<<vA", "v<<A"),
+        "5": ("<vA", "v<A"),
+        "6": ("vA",),
+        "7": ("<<A",),
+        "8": ("<A",),
+        "9": ("A",),
     },
 }
 
-NUMERICAL_STATES_VIA_DIRECTIONAL = {
-    "A": {UP: "3", LEFT: "0"},
-    "0": {UP: "2", RIGHT: "A"},
-    "1": {UP: "4", RIGHT: "2"},
-    "2": {UP: "5", RIGHT: "3", LEFT: "1", DOWN: "0"},
-    "3": {UP: "6", LEFT: "2", DOWN: "A"},
-    "4": {UP: "7", RIGHT: "5", DOWN: "1"},
-    "5": {UP: "8", RIGHT: "6", LEFT: "4", DOWN: "2"},
-    "6": {UP: "9", LEFT: "5", DOWN: "3"},
-    "7": {DOWN: "4", RIGHT: "8"},
-    "8": {DOWN: "5", RIGHT: "9", LEFT: "7"},
-    "9": {DOWN: "6", LEFT: "8"},
-}
-"""States of the numerical keypad that can be reached by directional moves."""
 
-DIRECTIONAL_STATES_VIA_DIRECTIONAL = {
-    "A": {LEFT: UP, DOWN: RIGHT},
-    UP: {RIGHT: "A", DOWN: DOWN},
-    LEFT: {RIGHT: DOWN},
-    DOWN: {LEFT: LEFT, UP: UP, RIGHT: RIGHT},
-    RIGHT: {LEFT: DOWN, UP: "A"},
-}
-
-
-def swap_inner_dicts(top_level: dict[str, dict[str] : tuple[str, ...]]) -> dict[str, dict[tuple[str, ...], str]]:
-    ret = {}
-    for inner in top_level:
-        new_inner = {}
-        for k, v in top_level[inner].items():
-            new_inner[v] = k
-        ret[inner] = new_inner
-    return ret
-
-
-DIRECTIONAL_STATE_TRANSITIONS = swap_inner_dicts(DIRECTIONAL_KEYPAD_CONTROL)
-NUMERICAL_STATE_TRANSITIONS = swap_inner_dicts(NUMERICAL_KEYPAD_CONTROL)
-
-
-def worker_helper(directional_robot_sequence: str, number_of_robots: int, controlled_robot_state: str) -> list[str]:
-    ret = []
+def worker_helper(directional_robot_sequence: str, number_of_robots: int) -> list[str]:
+    ret = [""]
     # each robot starts on ACTION
     controlled_robot_state = ACTION
     for key in directional_robot_sequence:
-        intermediate_keys = DIRECTIONAL_KEYPAD_CONTROL[controlled_robot_state][key]
-        if number_of_robots == 1:
-            ret.extend(intermediate_keys)
-        else:
-            helper_result = worker_helper(intermediate_keys, number_of_robots - 1, controlled_robot_state)
-            ret.extend(helper_result)
+        intermediate_sequences = DIRECTIONAL_KEYPAD_CONTROL[controlled_robot_state][key]
+        intermediate_sequence_results = []
+        for intermediate_sequence in intermediate_sequences:
+            if number_of_robots == 1:
+                intermediate_sequence_results.append(intermediate_sequence)
+            else:
+                helper_result = worker_helper(intermediate_sequence, number_of_robots - 1)
+                intermediate_sequence_results.extend(helper_result)
+        ret = [f"{r}{i}" for r in ret for i in intermediate_sequence_results]
         controlled_robot_state = key
+    with contextlib.suppress(ValueError):
+        ret.remove("")
     return ret
 
 
 def part1_work(door_code: str, number_of_robots) -> list[str]:
     numerical_robot_state = "A"
-    sequences = []
-    for key in door_code:
-        sequence_for_numerical_robot = NUMERICAL_KEYPAD_CONTROL[numerical_robot_state][key]
-        sequence = worker_helper(sequence_for_numerical_robot, number_of_robots, ACTION)
-        sequences.extend(sequence)
-        numerical_robot_state = key
-    return sequences
+    door_code_results = [""]
+    for numerical_key in door_code:
+        sequences_for_numerical_robot = NUMERICAL_KEYPAD_CONTROL[numerical_robot_state][numerical_key]
+        key_results = []
+        for sequence in sequences_for_numerical_robot:
+            sequences_for_key = worker_helper(sequence, number_of_robots)
+            key_results.extend(sequences_for_key)
+        numerical_robot_state = numerical_key
+        door_code_results = [f"{dcr}{kr}" for dcr in door_code_results for kr in key_results]
+    return door_code_results
 
 
 def numeric_part(door_code: str) -> int:
     number = int("".join([i for i in door_code if i.isnumeric()]))
-    print(f"{door_code} -> {number}")
     return number
 
 
-# TODO: trzeba pamiętać pozycję pośrednich robotów - one idą do action tylko, jak wydają polecenie wciśnięcia, a tak
-#  to cały czas są poza tym guzikiem.
 def part1(input_file: TextIOWrapper):
     door_codes = load_input(input_file)
     number_of_directional_robots = 2
@@ -311,9 +277,10 @@ def part1(input_file: TextIOWrapper):
     result = 0
     for door_code in door_codes:
         robot_moves = part1_work(door_code, number_of_directional_robots)
+        moves_by_len = sorted(robot_moves, key=lambda x: len(x))
         value = numeric_part(door_code)
-        complexity = value * len(robot_moves)
-        print(f"{door_code}: {"".join(robot_moves)}\t{len(robot_moves)}\t{complexity}")
+        complexity = value * len(moves_by_len[0])
+        print(f"{door_code}: {moves_by_len[0]}\t{len(moves_by_len[0])}\t{complexity}")
         result += complexity
 
     print(f"Part 1: {result:,}")
