@@ -1,25 +1,10 @@
 import argparse
-import collections
-import concurrent.futures
 import contextlib
-import enum
 import functools
-import gc
-import heapq
-import io
-import itertools
-import operator
-import re
-from collections import defaultdict, deque
-from dataclasses import dataclass, field
-from fractions import Fraction
 from io import TextIOWrapper
-from pathlib import Path
-from typing import Iterable, NamedTuple
 
 from rich import print
-from rich.pretty import pprint
-from tqdm.rich import tqdm, trange
+from tqdm import tqdm
 
 VERBOSE = False
 
@@ -59,7 +44,7 @@ DIRECTIONAL_KEYPAD_CONTROL = {
         RIGHT: (f"{RIGHT}{ACTION}",),
     },
     LEFT: {
-        ACTION: (">>^A", ">^>A"),
+        ACTION: (">>^A",),
         UP: (">^A",),
         DOWN: (">A",),
         LEFT: ("A",),
@@ -76,7 +61,7 @@ DIRECTIONAL_KEYPAD_CONTROL = {
         ACTION: ("A",),
         UP: ("<A",),
         DOWN: ("<vA", "v<A"),
-        LEFT: ("v<<A", "<v<A"),
+        LEFT: ("v<<A",),
         RIGHT: ("vA",),
     },
 }
@@ -231,7 +216,7 @@ NUMERICAL_KEYPAD_CONTROL = {
 }
 
 
-def worker_helper(directional_robot_sequence: str, number_of_robots: int) -> list[str]:
+def part1_worker_helper(directional_robot_sequence: str, number_of_robots: int) -> list[str]:
     ret = [""]
     # each robot starts on ACTION
     controlled_robot_state = ACTION
@@ -242,7 +227,7 @@ def worker_helper(directional_robot_sequence: str, number_of_robots: int) -> lis
             if number_of_robots == 1:
                 intermediate_sequence_results.append(intermediate_sequence)
             else:
-                helper_result = worker_helper(intermediate_sequence, number_of_robots - 1)
+                helper_result = part1_worker_helper(intermediate_sequence, number_of_robots - 1)
                 intermediate_sequence_results.extend(helper_result)
         ret = [f"{r}{i}" for r in ret for i in intermediate_sequence_results]
         controlled_robot_state = key
@@ -258,7 +243,7 @@ def part1_work(door_code: str, number_of_robots) -> list[str]:
         sequences_for_numerical_robot = NUMERICAL_KEYPAD_CONTROL[numerical_robot_state][numerical_key]
         key_results = []
         for sequence in sequences_for_numerical_robot:
-            sequences_for_key = worker_helper(sequence, number_of_robots)
+            sequences_for_key = part1_worker_helper(sequence, number_of_robots)
             key_results.extend(sequences_for_key)
         numerical_robot_state = numerical_key
         door_code_results = [f"{dcr}{kr}" for dcr in door_code_results for kr in key_results]
@@ -286,8 +271,55 @@ def part1(input_file: TextIOWrapper):
     print(f"Part 1: {result:,}")
 
 
+@functools.cache
+def part2_worker_helper(directional_robot_sequence: str, number_of_robots: int) -> int:
+    ret = 0
+    # each robot starts on ACTION
+    controlled_robot_state = ACTION
+    for key in directional_robot_sequence:
+        intermediate_sequences = DIRECTIONAL_KEYPAD_CONTROL[controlled_robot_state][key]
+        intermediate_sequence_length = 999999999999999999
+        for intermediate_sequence in intermediate_sequences:
+            if number_of_robots == 1:
+                intermediate_sequence_length = min(len(intermediate_sequence), intermediate_sequence_length)
+            else:
+                helper_result = part2_worker_helper(intermediate_sequence, number_of_robots - 1)
+                intermediate_sequence_length = min(helper_result, intermediate_sequence_length)
+        ret += intermediate_sequence_length
+        controlled_robot_state = key
+    if number_of_robots >= 4 and VERBOSE:
+        print(f"{number_of_robots=}", part2_worker_helper.cache_info())
+    return ret
+
+
+def part2_work(door_code: str, number_of_robots) -> int:
+    numerical_robot_state = "A"
+    door_code_results = 0
+    for numerical_key in tqdm(door_code, desc="numerical keys"):
+        sequences_for_numerical_robot = NUMERICAL_KEYPAD_CONTROL[numerical_robot_state][numerical_key]
+        key_sequence_length = 999999999999999999
+        for sequence in sequences_for_numerical_robot:
+            sequences_for_key = part2_worker_helper(sequence, number_of_robots)
+            key_sequence_length = min(sequences_for_key, key_sequence_length)
+        numerical_robot_state = numerical_key
+        door_code_results += key_sequence_length
+    return door_code_results
+
+
 def part2(input_file: TextIOWrapper):
-    print(f"Part 2: {0:,}")
+    door_codes = load_input(input_file)
+    number_of_directional_robots = 25
+    # number of keypads: 1 (human) directional + (number_of_directional_robots-1) directional + 1 numerical
+    result = 0
+    for door_code in tqdm(door_codes, desc="door codes"):
+        robot_moves_length = part2_work(door_code, number_of_directional_robots)
+        value = numeric_part(door_code)
+        complexity = value * robot_moves_length
+        if VERBOSE:
+            print(f"{door_code}: {robot_moves_length}\t{complexity}")
+        result += complexity
+
+    print(f"Part 2: {result:,}")
 
 
 def main():
