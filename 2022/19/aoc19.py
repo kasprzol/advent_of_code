@@ -22,7 +22,7 @@ class Resources(typing.NamedTuple):
     ore: int
     clay: int
     obsidian: int
-    geods: int
+    geodes: int
 
 
 class Blueprint(typing.NamedTuple):
@@ -79,7 +79,7 @@ def part1_worker_helper(robots: Robots, resources: Resources, minutes_left: int)
     # if ((ci := part1_worker_helper.cache_info()).hits + ci.misses) % 200_000 == 0:
     #     print(ci, f"{ci.hits / (ci.hits+ci.misses):.2%}")
     if minutes_left == 0:
-        return resources.geods, tuple()
+        return resources.geodes, tuple()
     geodes_when_constructed_ore_robot = 0, tuple()
     geodes_when_constructed_clay_robot = 0, tuple()
     geodes_when_constructed_obsidian_robot = 0, tuple()
@@ -90,7 +90,7 @@ def part1_worker_helper(robots: Robots, resources: Resources, minutes_left: int)
             ore=resources.ore - BLUEPRINT.geode_robot_cost.ore + robots.ore,
             clay=resources.clay + robots.clay,
             obsidian=resources.obsidian - BLUEPRINT.geode_robot_cost.obsidian + robots.obsidian,
-            geods=resources.geods + robots.geode,
+            geodes=resources.geodes + robots.geode,
         )
         res = part1_worker_helper(robots._replace(geode=robots.geode + 1), new_resources, minutes_left - 1)
         geodes_when_constructed_geode_robot = res[0], ((TOTAL_MINUTES_PART1 - minutes_left, "geode"), *res[1])
@@ -99,7 +99,7 @@ def part1_worker_helper(robots: Robots, resources: Resources, minutes_left: int)
             ore=resources.ore - BLUEPRINT.obsidian_robot_cost.ore + robots.ore,
             clay=resources.clay - BLUEPRINT.obsidian_robot_cost.clay + robots.clay,
             obsidian=resources.obsidian + robots.obsidian,
-            geods=resources.geods + robots.geode,
+            geodes=resources.geodes + robots.geode,
         )
         res = part1_worker_helper(robots._replace(obsidian=robots.obsidian + 1), new_resources, minutes_left - 1)
         geodes_when_constructed_obsidian_robot = res[0], ((TOTAL_MINUTES_PART1 - minutes_left, "obsidian"), *res[1])
@@ -108,7 +108,7 @@ def part1_worker_helper(robots: Robots, resources: Resources, minutes_left: int)
             ore=resources.ore - BLUEPRINT.clay_robot_cost.ore + robots.ore,
             clay=resources.clay + robots.clay,
             obsidian=resources.obsidian + robots.obsidian,
-            geods=resources.geods + robots.geode,
+            geodes=resources.geodes + robots.geode,
         )
         res = part1_worker_helper(robots._replace(clay=robots.clay + 1), new_resources, minutes_left - 1)
         geodes_when_constructed_clay_robot = res[0], ((TOTAL_MINUTES_PART1 - minutes_left, "clay"), *res[1])
@@ -117,7 +117,7 @@ def part1_worker_helper(robots: Robots, resources: Resources, minutes_left: int)
             ore=resources.ore - BLUEPRINT.ore_robot_cost.ore + robots.ore,
             clay=resources.clay + robots.clay,
             obsidian=resources.obsidian + robots.obsidian,
-            geods=resources.geods + robots.geode,
+            geodes=resources.geodes + robots.geode,
         )
         res = part1_worker_helper(robots._replace(ore=robots.ore + 1), new_resources, minutes_left - 1)
         geodes_when_constructed_ore_robot = res[0], ((TOTAL_MINUTES_PART1 - minutes_left, "ore"), *res[1])
@@ -126,7 +126,7 @@ def part1_worker_helper(robots: Robots, resources: Resources, minutes_left: int)
         ore=resources.ore + robots.ore,
         clay=resources.clay + robots.clay,
         obsidian=resources.obsidian + robots.obsidian,
-        geods=resources.geods + robots.geode,
+        geodes=resources.geodes + robots.geode,
     )
     geodes_when_no_robots_constructed = part1_worker_helper(robots, new_resources, minutes_left - 1)
 
@@ -169,8 +169,33 @@ def part1(input_file: TextIOWrapper):
     print(f"Part 1: {result:,}")
 
 
+def part2_work(blueprint: Blueprint):
+    total_minutes = 32
+    part1_worker_helper.cache_clear()
+    global BLUEPRINT
+    BLUEPRINT = blueprint
+    res = part1_worker_helper(Robots(1, 0, 0, 0), Resources(0, 0, 0, 0), total_minutes)
+    print(res[1])
+    return res[0]
+
+
 def part2(input_file: TextIOWrapper):
-    result = 0
+    blueprints = load_input(input_file)
+    blueprints = blueprints[:3]
+    if VERBOSE:
+        print(blueprints)
+    result = 1
+    part1_start = time.monotonic()
+    for bp in blueprints:
+        bp_started_at = time.monotonic()
+        number_of_geodes = part2_work(bp)
+        bp_finish = time.monotonic()
+        print(f"{bp.number} * {number_of_geodes}. Took {bp_finish - bp_started_at:.2f} seconds.")
+        result += number_of_geodes
+    part1_finish = time.monotonic()
+    print(
+        f"Part 2: {result:,}. Took {part1_finish - part1_start:.2f} seconds ({(part1_finish-part1_start)/60:.2f} minutes)."
+    )
     print(f"Part 2: {result:,}")
 
 
