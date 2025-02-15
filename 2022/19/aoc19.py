@@ -71,7 +71,7 @@ BLUEPRINT: Blueprint = None
 TOTAL_MINUTES_PART1 = 24
 
 
-@functools.cache
+@functools.lru_cache(maxsize=90_000_000)
 def part1_worker_helper(robots: Robots, resources: Resources, minutes_left: int):
     if VERBOSE:
         print(f"minutes_left: {minutes_left}\t{robots}\t{resources}")
@@ -94,7 +94,12 @@ def part1_worker_helper(robots: Robots, resources: Resources, minutes_left: int)
         )
         res = part1_worker_helper(robots._replace(geode=robots.geode + 1), new_resources, minutes_left - 1)
         geodes_when_constructed_geode_robot = res[0], ((TOTAL_MINUTES_PART1 - minutes_left, "geode"), *res[1])
-    if resources.clay >= BLUEPRINT.obsidian_robot_cost.clay and resources.ore >= BLUEPRINT.obsidian_robot_cost.ore:
+    if (
+        resources.clay >= BLUEPRINT.obsidian_robot_cost.clay
+        and resources.ore >= BLUEPRINT.obsidian_robot_cost.ore
+        and robots.obsidian
+        < BLUEPRINT.geode_robot_cost.obsidian  # don't build more obsidian robots than the cost of a geode robot
+    ):
         new_resources = Resources(
             ore=resources.ore - BLUEPRINT.obsidian_robot_cost.ore + robots.ore,
             clay=resources.clay - BLUEPRINT.obsidian_robot_cost.clay + robots.clay,
@@ -103,7 +108,8 @@ def part1_worker_helper(robots: Robots, resources: Resources, minutes_left: int)
         )
         res = part1_worker_helper(robots._replace(obsidian=robots.obsidian + 1), new_resources, minutes_left - 1)
         geodes_when_constructed_obsidian_robot = res[0], ((TOTAL_MINUTES_PART1 - minutes_left, "obsidian"), *res[1])
-    if resources.ore >= BLUEPRINT.clay_robot_cost.ore:
+    # don't build more clay robots than obsidian robot cost.
+    if resources.ore >= BLUEPRINT.clay_robot_cost.ore and robots.clay < BLUEPRINT.obsidian_robot_cost.clay:
         new_resources = Resources(
             ore=resources.ore - BLUEPRINT.clay_robot_cost.ore + robots.ore,
             clay=resources.clay + robots.clay,
@@ -112,7 +118,12 @@ def part1_worker_helper(robots: Robots, resources: Resources, minutes_left: int)
         )
         res = part1_worker_helper(robots._replace(clay=robots.clay + 1), new_resources, minutes_left - 1)
         geodes_when_constructed_clay_robot = res[0], ((TOTAL_MINUTES_PART1 - minutes_left, "clay"), *res[1])
-    if resources.ore >= BLUEPRINT.ore_robot_cost.ore:
+    if resources.ore >= BLUEPRINT.ore_robot_cost.ore and robots.ore < max(
+        BLUEPRINT.ore_robot_cost.ore,
+        BLUEPRINT.clay_robot_cost.ore,
+        BLUEPRINT.obsidian_robot_cost.ore,
+        BLUEPRINT.geode_robot_cost.ore,
+    ):
         new_resources = Resources(
             ore=resources.ore - BLUEPRINT.ore_robot_cost.ore + robots.ore,
             clay=resources.clay + robots.clay,
@@ -190,8 +201,8 @@ def part2(input_file: TextIOWrapper):
         bp_started_at = time.monotonic()
         number_of_geodes = part2_work(bp)
         bp_finish = time.monotonic()
-        print(f"{bp.number} * {number_of_geodes}. Took {bp_finish - bp_started_at:.2f} seconds.")
-        result += number_of_geodes
+        print(f"{bp.number}: {number_of_geodes}. Took {bp_finish - bp_started_at:.2f} seconds.")
+        result *= number_of_geodes
     part1_finish = time.monotonic()
     print(
         f"Part 2: {result:,}. Took {part1_finish - part1_start:.2f} seconds ({(part1_finish-part1_start)/60:.2f} minutes)."
