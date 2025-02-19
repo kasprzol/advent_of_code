@@ -1,21 +1,17 @@
 import gc
-import time
+import heapq
 import re
-from collections import defaultdict
+import time
+from collections import defaultdict, deque
+from dataclasses import dataclass, field
 from itertools import combinations
-
-from dataclasses import dataclass
-from typing import NamedTuple
+from typing import Iterable, NamedTuple, TypeAlias
 
 from tqdm.rich import tqdm
 
-VERBOSE = 2
+VERBOSE = 0
 STARTING_VALVE = "AA"
 TEST_DATA = False
-if TEST_DATA:
-    ...
-else:
-    pass
 
 
 class Valve(NamedTuple):
@@ -129,6 +125,7 @@ def part_1():
     time_left = 30
     current_minute = 1
     opened_valves: frozenset[str] = frozenset()
+    started = time.monotonic()
     found_max = mega_tree(
         valves,
         frozenset(valves),
@@ -141,6 +138,8 @@ def part_1():
         [],
     )
     print("\n".join(found_max[1]))
+    time_took = time.monotonic() - started
+    print(f"Part 1 took {time_took:.2f} seconds ({time_took/60:.2f} minutes)")
     print(f"part 1 max: {found_max[0]}")
 
 
@@ -163,11 +162,11 @@ def prune_broken_valves(valves: dict[str, Valve]) -> dict[str, Valve]:
                 if other_tunnel[0] == valve.name:
                     tunnel_to_remove = other_tunnel
                     continue
-                # add direct conection going through this node
+                # add direct connection going through this node
                 # check if the connection already exists - if so then check if the new direct one is better
                 for tunnel_to_add in tunnels_to_add:
                     if other_tunnel[0] == tunnel_to_add[0] and other_tunnel[1] < tunnel_to_add[1]:
-                        # the existing conection is better - skip
+                        # the existing connection is better - skip
                         tunnels_to_add.remove(tunnel_to_add)
                         break
             assert tunnel_to_remove
@@ -184,48 +183,180 @@ def prune_broken_valves(valves: dict[str, Valve]) -> dict[str, Valve]:
     return new_valves
 
 
+@dataclass
+class WorkerState:
+    current_valve: str
+    time: int = 1
+    opened_vales: list[tuple[str, int]] = field(default_factory=set, repr=False, init=True, compare=False)
+    actions: list[str] = field(default_factory=list, repr=False, init=True, compare=False)
+
+
+def part2_worker(
+    starting_valve: str,
+    valve_distances: dict[str, dict[str, int]],
+    valves: dict[str, Valve],
+    allowed_valves: frozenset[str],
+    time_limit: int,
+):
+    # we have 3 options:
+    # - open the current valve
+    # - move to another valve
+    # - if all valves are open then just wait
+    states_to_check = deque()
+    states_to_check.append(WorkerState(starting_valve, 1))
+    best_score = 0
+    best_actions = []
+    while states_to_check:
+        current_state = states_to_check.popleft()
+
+        # check if we are done
+        if current_state.time >= time_limit:
+            presure_released = sum(
+                valves[valve[0]].flow_rate * (time_limit - valve[1]) for valve in current_state.opened_vales
+            )
+            if presure_released > best_score:
+                best_score = presure_released
+                best_actions = current_state.actions
+            continue
+
+        # open the current valve
+        if (
+            current_state.current_valve not in [v[0] for v in current_state.opened_vales]
+            and current_state.current_valve in allowed_valves
+            and valves[current_state.current_valve].flow_rate > 0
+        ):
+            new_state = WorkerState(
+                current_state.current_valve,
+                current_state.time + 1,
+                [*current_state.opened_vales, (current_state.current_valve, current_state.time)],
+                [*current_state.actions, f"{current_state.time}: open {current_state.current_valve}"],
+            )
+            states_to_check.append(new_state)
+
+        # no point moving to another valve while we just got here - only move after we have opened a valve
+        else:
+            for valve in allowed_valves:
+                if (
+                    valve != current_state.current_valve
+                    and valves[valve].flow_rate > 0
+                    and valve not in [v[0] for v in current_state.opened_vales]
+                ):
+                    new_state = WorkerState(
+                        valve,
+                        current_state.time + valve_distances[current_state.current_valve][valve],
+                        current_state.opened_vales,
+                        [*current_state.actions, f"{current_state.time}: go to {valve}"],
+                    )
+                    states_to_check.append(new_state)
+
+        # do nothing
+        new_state = WorkerState(
+            current_state.current_valve,
+            time_limit,
+            current_state.opened_vales,
+            [*current_state.actions, f"{current_state.time}: wait"],
+        )
+        states_to_check.append(new_state)
+    return best_score, best_actions
+
+
+VALVE_NAME: TypeAlias = str
+
+
+class Edge(NamedTuple):
+    target: VALVE_NAME
+    weight: int
+
+
+@dataclass(order=True)
+class Node:
+    """A graph node class for use with the Dijkstra algorithm."""
+
+    coordinates: VALVE_NAME
+    links: list[Edge] = field(default_factory=list, repr=False, init=False, compare=False)
+
+    # def __lt__(self, other):
+    #     if not isinstance(other, Node):
+    #         return NotImplemented
+    #     return self.coordinates < other.coordinates
+
+    def __hash__(self) -> int:
+        return hash(self.coordinates)
+
+
+def dijkstra(
+    nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]
+) -> tuple[dict[VALVE_NAME, Node], dict[VALVE_NAME, int]]:
+    """Implementation of Dijkstra graph path finding algorithm.
+
+    Actually finds a route from the start node to all reachable nodes.
+
+    :param nodes: an iterable of all the nodes in the graph.
+    :param start: the start node.
+    :param end_nodes: an iterable of end nodes.
+    :returns: a mapping of node to its parent (predecesor on the path).
+    """
+    graph = {node.coordinates: node for node in nodes}
+    distance = defaultdict(lambda: 99_999_999)
+    distance[start.coordinates] = 0
+    parent: dict[VALVE_NAME, Node | None] = {start.coordinates: None}
+    queue: list[tuple[int, Node]] = [(0, start)]
+    for end_node in end_nodes:
+        heapq.heappush(queue, (9999_9999_9999_9999, end_node))
+    while queue:
+        unused_dist, u = heapq.heappop(queue)
+        for link in u.links:
+            if (new_distance := distance[u.coordinates] + link.weight) < distance[link.target]:
+                distance[link.target] = new_distance
+                parent[link.target] = u
+                heapq.heappush(queue, (distance[link.target], graph[link.target]))
+
+    return parent, distance
+
+
+def compute_all_paths(valves: dict[str, Valve]):
+    """Find all paths from one valve to another."""
+    # we need all paths to valves with flow rate > 0
+    # after prune_broken_valves we can assume that all valves have flow rate > 0 (or are the starting valve)
+    nodes = []
+    # first build the datastructures needed for dijkstra
+    for valve in valves.values():
+        edges = [Edge(target=tunnel[0], weight=tunnel[1]) for tunnel in valve.tunnels]
+        nodes.append(Node(coordinates=valve.name))
+        nodes[-1].links = edges
+    # now run dijkstra for each valve
+    results = {}
+    for node in nodes:
+        parents, distances = dijkstra(nodes, node, nodes)
+        results[node.coordinates] = dict(distances)
+    return results
+
+
 def part_2():
     valves = load_data()
     valves = prune_broken_valves(valves)
+    valves_to_distances = compute_all_paths(valves)
+    ##################
+    # check with part 1
+    # presure_released, actions = part2_worker(STARTING_VALVE, valves_to_distances, valves, valves.keys(), 30)
+    # print(f"Part 1 result: {presure_released} ({actions})")
+    # return
+    ##################
     time_left = 26
-    current_minute = 1
-    opened_valves: frozenset[str] = frozenset()
     best_score = 0
     best_combination = None
     all_combinations = list(combinations(valves, len(valves) // 2))
-    for combination in all_combinations:
+    for combination in tqdm(all_combinations):
         human_valves = frozenset(combination) | frozenset((STARTING_VALVE,))  # have to have the starting valve
-        human_valves = frozenset((STARTING_VALVE, "BB", "JJ", "CC"))  # have to have the starting valve
         elephant_valves = frozenset({v for v in valves if v not in human_valves or v == STARTING_VALVE})
-        print(f"Trying combination human: {human_valves}; elephant: {elephant_valves}")
+        if VERBOSE > 0:
+            print(f"Trying combination human: {human_valves}; elephant: {elephant_valves}")
         iter_start = time.perf_counter()
-        human_score = mega_tree(
-            valves,
-            human_valves,
-            STARTING_VALVE,
-            opened_valves,
-            current_minute,
-            1,
-            defaultdict(int, **{v: 0 for v in valves}),
-            [],
-            [],
-            time_limit=time_left,
-        )
+        human_score = part2_worker(STARTING_VALVE, valves_to_distances, valves, human_valves, time_left)
         human_time = time.perf_counter() - iter_start
-        print(f"Human part took: {human_time:,} seconds")
-        elephant_score = mega_tree(
-            valves,
-            elephant_valves,
-            STARTING_VALVE,
-            opened_valves,
-            current_minute,
-            1,
-            defaultdict(int, **{v: 0 for v in valves}),
-            [],
-            [],
-            time_limit=time_left,
-        )
-        print(f"Total iteration time: {time.perf_counter() - iter_start} seconds")
+        # print(f"Human part took: {human_time:,} seconds")
+        elephant_score = part2_worker(STARTING_VALVE, valves_to_distances, valves, elephant_valves, time_left)
+        # print(f"Total iteration time: {time.perf_counter() - iter_start} seconds")
         if VERBOSE > 0:
             print(f"Scores: Human: {human_score}, elephant: {elephant_score}")
         if (combination_score := human_score[0] + elephant_score[0]) > best_score:

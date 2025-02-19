@@ -152,7 +152,6 @@ def dijkstra(nodes: Iterable[Node], start: Node, end_nodes: Iterable[Node]) -> d
     while queue:
         unused_dist, u = heapq.heappop(queue)
         for link in u.links:
-            # TODO: support for edge weights (right now hardcoded as 1).
             if (new_distance := distance[u.coordinates] + link.weight) < distance[link.target]:
                 distance[link.target] = new_distance
                 parent[link.target] = u
