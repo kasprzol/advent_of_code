@@ -346,9 +346,15 @@ def part_2():
     best_score = 0
     best_combination = None
     all_combinations = list(combinations(valves, len(valves) // 2))
+    seen_combinations = set()
     for combination in tqdm(all_combinations):
         human_valves = frozenset(combination) | frozenset((STARTING_VALVE,))  # have to have the starting valve
+        if human_valves in seen_combinations:
+            continue
         elephant_valves = frozenset({v for v in valves if v not in human_valves or v == STARTING_VALVE})
+        # it does not matter which one is human and which one is elephant.
+        seen_combinations.add(human_valves)
+        seen_combinations.add(elephant_valves)
         if VERBOSE > 0:
             print(f"Trying combination human: {human_valves}; elephant: {elephant_valves}")
         iter_start = time.perf_counter()
